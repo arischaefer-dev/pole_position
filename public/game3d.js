@@ -562,25 +562,35 @@ function buildF1(body, accent) {
   const bodyMat = new THREE.MeshLambertMaterial({ color: body });
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x181818 });
   const accMat = new THREE.MeshLambertMaterial({ color: accent });
+  const whiteMat = new THREE.MeshLambertMaterial({ color: 0xfcfcfc });
   const add = (geo, mat, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     grp.add(m);
     return m;
   };
-  // +z is the direction of travel (three.js forward)
-  add(new THREE.BoxGeometry(1.5, 0.55, 3.6), bodyMat, 0, 0.5, -0.1);       // tub
-  add(new THREE.BoxGeometry(0.7, 0.4, 1.6), bodyMat, 0, 0.42, 2.2);        // nose
-  add(new THREE.BoxGeometry(2.3, 0.1, 0.6), accMat, 0, 0.3, 2.7);          // front wing
-  add(new THREE.BoxGeometry(0.9, 0.55, 1.5), bodyMat, 0, 0.95, -0.7);      // engine cowl
-  add(new THREE.BoxGeometry(0.5, 0.42, 0.5), new THREE.MeshLambertMaterial({ color: 0xfcfcfc }), 0, 1.1, 0.1); // helmet
-  add(new THREE.BoxGeometry(2.3, 0.14, 0.8), accMat, 0, 1.25, -1.8);       // rear wing
-  add(new THREE.BoxGeometry(0.12, 0.5, 0.8), accMat, -1.1, 1.05, -1.8);
-  add(new THREE.BoxGeometry(0.12, 0.5, 0.8), accMat, 1.1, 1.05, -1.8);
-  // wheels
-  for (const [wx, wz, r] of [[-1.0, 1.6, 0.42], [1.0, 1.6, 0.42], [-1.05, -1.35, 0.52], [1.05, -1.35, 0.52]]) {
-    const w = add(new THREE.BoxGeometry(0.5, r * 2, r * 2), darkMat, wx, r, wz);
-    w.add(new THREE.Mesh(new THREE.BoxGeometry(0.52, r, r),
+  // +z is the direction of travel (three.js forward).
+  // Rear view matches the arcade sprite: huge black rear tires, red
+  // body + red wing, blue engine block in the middle, white helmet.
+  add(new THREE.BoxGeometry(1.4, 0.5, 3.4), bodyMat, 0, 0.45, 0.1);        // tub
+  add(new THREE.BoxGeometry(2.0, 0.32, 1.5), bodyMat, 0, 0.32, -0.5);      // wide side pods
+  add(new THREE.BoxGeometry(0.65, 0.38, 1.5), bodyMat, 0, 0.4, 2.2);       // nose
+  add(new THREE.BoxGeometry(2.1, 0.1, 0.55), bodyMat, 0, 0.28, 2.75);      // front wing
+  add(new THREE.BoxGeometry(0.24, 0.16, 0.55), darkMat, -1.05, 0.28, 2.75);
+  add(new THREE.BoxGeometry(0.24, 0.16, 0.55), darkMat, 1.05, 0.28, 2.75);
+  add(new THREE.BoxGeometry(1.25, 0.6, 1.1), accMat, 0, 0.72, -0.95);      // blue engine block
+  add(new THREE.BoxGeometry(0.55, 0.32, 0.06), whiteMat, 0, 0.72, -1.52);  // rear detail plate
+  add(new THREE.BoxGeometry(0.5, 0.4, 0.5), whiteMat, 0, 1.02, 0.35);      // helmet
+  add(new THREE.BoxGeometry(0.52, 0.12, 0.52), accMat, 0, 1.2, 0.35);      // helmet stripe
+  add(new THREE.BoxGeometry(2.35, 0.13, 0.75), bodyMat, 0, 1.28, -1.65);   // red rear wing
+  add(new THREE.BoxGeometry(0.14, 0.55, 0.75), darkMat, -1.12, 1.0, -1.65); // endplates
+  add(new THREE.BoxGeometry(0.14, 0.55, 0.75), darkMat, 1.12, 1.0, -1.65);
+  add(new THREE.BoxGeometry(0.16, 0.42, 0.16), darkMat, 0, 0.95, -1.65);   // wing pylon
+  // wheels: [x, z, radius, width] — rear tires much bigger, like the sprite
+  for (const [wx, wz, r, ww] of [[-1.02, 1.65, 0.4, 0.45], [1.02, 1.65, 0.4, 0.45],
+                                 [-1.18, -1.25, 0.56, 0.7], [1.18, -1.25, 0.56, 0.7]]) {
+    const w = add(new THREE.BoxGeometry(ww, r * 2, r * 2), darkMat, wx, r, wz);
+    w.add(new THREE.Mesh(new THREE.BoxGeometry(ww + 0.02, r, r),
       new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })));
   }
   return grp;
