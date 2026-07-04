@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Pole Position 3D</title>
-<link rel="icon" href="data:,">
+<title>Pole Position</title>
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
@@ -18,37 +17,28 @@
     align-items: center; justify-content: center;
     gap: 8px;
   }
-  #stack { position: relative; }
-  #stack canvas {
-    display: block;
+  canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
-  }
-  #gl { background: #000; }
-  #hud {
-    position: absolute; inset: 0;
-    pointer-events: none;
+    background: #000;
+    outline: none;
   }
   #help {
     font-size: 12px; color: #888; text-align: center;
     line-height: 1.5;
   }
   #help b { color: #ddd; }
-  #help a { color: #6bf; }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <div id="stack">
-    <canvas id="gl" width="512" height="448"></canvas>
-    <canvas id="hud" width="256" height="224"></canvas>
-  </div>
+  <canvas id="game" width="256" height="224" tabindex="0"></canvas>
   <div id="help">
     <b>&larr;/&rarr;</b> steer &nbsp; <b>&uarr;</b> accelerate &nbsp; <b>&darr;</b> brake &nbsp;
     <b>Z</b>/<b>Shift</b> shift gear (LO/HI) &nbsp; <b>Enter</b> start &nbsp; <b>M</b> mute
-    &nbsp;&middot;&nbsp; <a href="/classic/">classic 2D version</a>
+    &nbsp;&middot;&nbsp; <a href="/" style="color:#6bf">3D version</a>
   </div>
 </div>
-<script type="module" src="game3d.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
