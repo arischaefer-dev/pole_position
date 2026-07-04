@@ -201,16 +201,18 @@ const LAP_TARGET = 2000;                 // meters
 const HALF_W = 5.5;                      // road half width, meters
 const N_SAMP = 1600;
 
+/* x is negated vs the drawing-board sketch so the turns read correctly
+   on screen (screen-right for a forward camera is world -x). */
 const CP_RAW = [
-  [0, -90], [0, 150], [0, 400], [0, 600],          // front straight (north)
-  [30, 700], [130, 730], [230, 690],               // T1 sharp right
-  [330, 660], [430, 680], [530, 650],              // easy left kink
-  [640, 600], [700, 480], [650, 360], [540, 320],  // sweeping right horseshoe
-  [430, 300], [330, 310],                          // run back WSW
-  [250, 350], [215, 430],                          // right lead-in climbs NNW
-  [200, 510], [165, 540], [130, 500],              // LEFT HAIRPIN
-  [120, 420], [150, 330],                          // exit SSE
-  [170, 150], [140, 20], [70, -140], [0, -190]     // long gradual right onto straight
+  [0, -90], [0, 150], [0, 400], [0, 600],              // front straight
+  [-30, 700], [-130, 730], [-230, 690],                // T1 sharp right
+  [-330, 660], [-430, 680], [-530, 650],               // easy left kink
+  [-640, 600], [-700, 480], [-650, 360], [-540, 320],  // sweeping right horseshoe
+  [-430, 300], [-330, 310],                            // run back
+  [-250, 350], [-215, 430],                            // right lead-in
+  [-200, 510], [-165, 540], [-130, 500],               // LEFT HAIRPIN
+  [-120, 420], [-150, 330],                            // exit
+  [-170, 150], [-140, 20], [-70, -140], [0, -190]      // long gradual right onto straight
 ];   // [0,-190] -> [0,-90] -> [0,150] keeps the grid + start line dead straight
 
 function buildTrackCurve() {
@@ -226,7 +228,8 @@ const PTS = [], TANG = [], RIGHT = [], KAPPA = [];
 for (let i = 0; i < N_SAMP; i++) {
   PTS.push(trackCurve.getPointAt(i / N_SAMP));
   TANG.push(trackCurve.getTangentAt(i / N_SAMP).setY(0).normalize());
-  RIGHT.push(new THREE.Vector3(TANG[i].z, 0, -TANG[i].x));
+  // T x up = screen-right for a camera following the tangent
+  RIGHT.push(new THREE.Vector3(-TANG[i].z, 0, TANG[i].x));
 }
 { // signed curvature (>0 = right turn), lightly smoothed
   const raw = [];
@@ -236,7 +239,7 @@ for (let i = 0; i < N_SAMP; i++) {
     let dth = Math.atan2(b.x, b.z) - Math.atan2(a.x, a.z);
     if (dth > Math.PI) dth -= 2 * Math.PI;
     if (dth < -Math.PI) dth += 2 * Math.PI;
-    raw.push(dth / ds);
+    raw.push(-dth / ds);   // kappa > 0 = right-hand turn as seen on screen
   }
   for (let i = 0; i < N_SAMP; i++) {
     let s = 0;
@@ -273,7 +276,7 @@ renderer.setSize(GLW, GLH, false);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(C.sky);
 scene.fog = new THREE.Fog(C.sky, 1000, 2600);
-const camera = new THREE.PerspectiveCamera(68, GLW / GLH, 0.5, 4000);
+const camera = new THREE.PerspectiveCamera(68, GLW / GLH, 1, 4000);
 scene.add(new THREE.AmbientLight(0xffffff, 1.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(300, 600, 200);
@@ -285,7 +288,7 @@ scene.add(sun);
     new THREE.PlaneGeometry(9000, 9000),
     new THREE.MeshBasicMaterial({ color: C.grass }));
   g.rotation.x = -Math.PI / 2;
-  g.position.y = -0.08;
+  g.position.y = -0.4;
   scene.add(g);
 }
 
@@ -332,7 +335,12 @@ function buildRoad() {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colArr, 3));
   const mesh = new THREE.Mesh(geo,
-    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    new THREE.MeshBasicMaterial({
+      vertexColors: true, side: THREE.DoubleSide,
+      // pull the road toward the camera in depth so the huge ground
+      // plane can never z-fight it away at distance
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    }));
   scene.add(mesh);
 }
 buildRoad();
@@ -349,7 +357,7 @@ buildRoad();
     new THREE.MeshLambertMaterial({ color: 0xfcfcfc, flatShading: true }));
   snow.position.y = 300 - 55 + 1;
   fuji.add(cone, snow);
-  fuji.position.set(700, 0, 1900);
+  fuji.position.set(-700, 0, 1900);
   scene.add(fuji);
 
   const mtMat = new THREE.MeshLambertMaterial({ color: 0x00841c, flatShading: true });
@@ -357,7 +365,7 @@ buildRoad();
     const a = i / 12 * Math.PI * 2 + 0.26;
     const r = 1350 + (i % 3) * 260;
     const m = new THREE.Mesh(new THREE.ConeGeometry(260 + (i % 4) * 90, 110 + (i % 3) * 60, 7), mtMat);
-    m.position.set(Math.cos(a) * r + 300, (110 + (i % 3) * 60) / 2 - 4, Math.sin(a) * r + 300);
+    m.position.set(Math.cos(a) * r - 300, (110 + (i % 3) * 60) / 2 - 4, Math.sin(a) * r + 300);
     scene.add(m);
   }
   const cloudMat = new THREE.MeshBasicMaterial({ color: 0xfcfcfc });
@@ -365,7 +373,7 @@ buildRoad();
     const a = i / 10 * Math.PI * 2 + 1.1;
     const r = 1100 + (i % 4) * 330;
     const c = new THREE.Mesh(new THREE.BoxGeometry(90 + (i % 3) * 50, 10, 34), cloudMat);
-    c.position.set(Math.cos(a) * r + 200, 330 + (i % 5) * 40, Math.sin(a) * r + 250);
+    c.position.set(Math.cos(a) * r - 200, 330 + (i % 5) * 40, Math.sin(a) * r + 250);
     scene.add(c);
   }
 }
@@ -393,15 +401,19 @@ function billboardTex(text, bg, fg) {
 function arrowTex(dir) {
   return canvasTexture(120, 72, (g) => {
     g.fillStyle = '#fcfcfc'; g.fillRect(0, 0, 120, 72);
+    g.save();
+    if (dir < 0) { g.translate(120, 0); g.scale(-1, 1); }
+    // curved arrow sweeping up and to the right, like the arcade boards
+    g.strokeStyle = '#d81800';
+    g.lineWidth = 14;
+    g.beginPath();
+    g.arc(72, 58, 34, Math.PI, Math.PI * 1.5);   // quarter arc: left -> top
+    g.stroke();
     g.fillStyle = '#d81800';
-    g.fillRect(24, 44, 72, 12);
-    if (dir > 0) {
-      g.fillRect(84, 20, 12, 32); g.fillRect(72, 12, 24, 12);
-      g.fillRect(96, 24, 8, 8); g.fillRect(76, 4, 8, 8);
-    } else {
-      g.fillRect(24, 20, 12, 32); g.fillRect(24, 12, 24, 12);
-      g.fillRect(16, 24, 8, 8); g.fillRect(36, 4, 8, 8);
-    }
+    g.beginPath();                                // arrowhead pointing right
+    g.moveTo(70, 10); g.lineTo(70, 38); g.lineTo(100, 24);
+    g.closePath(); g.fill();
+    g.restore();
   });
 }
 function makeSignMesh(tex, wM, hM, poleH) {
@@ -752,7 +764,7 @@ function updateDriving(dt, racing) {
   } else {
     if (keys['arrowup'] || keys['w']) G.speed += accelFor(G.gear, speedPct) * dt;
     else G.speed -= MAX_SPEED / 8 * dt;
-    if (keys['arrowdown'] || keys['s']) G.speed -= MAX_SPEED / 3 * dt;
+    if (keys['arrowdown'] || keys['s'] || keys[' ']) G.speed -= MAX_SPEED / 3 * dt;
     const cap = (G.gear ? 1 : 0.46) * MAX_SPEED;
     if (G.speed > cap) G.speed = Math.max(cap, G.speed - MAX_SPEED / 4 * dt);
     const offRoad = Math.abs(G.playerX) > HALF_W;
@@ -986,7 +998,7 @@ function updateView() {
     !((G.state === 'lightsQ' || G.state === 'lightsR') && frame % 16 < 8);
   if (driving) {
     posAt(G.pos, G.playerX, playerMesh.position);
-    playerMesh.rotation.y = headingAt(G.pos) + G.steer * 0.14 * (0.3 + 0.7 * G.speed / MAX_SPEED);
+    playerMesh.rotation.y = headingAt(G.pos) - G.steer * 0.14 * (0.3 + 0.7 * G.speed / MAX_SPEED);
     playerMesh.position.y = G.speed > 5 ? (frame % 6 < 3 ? 0 : 0.05) : 0;
   }
 
@@ -1166,7 +1178,7 @@ requestAnimationFrame(loop);
 /* debug hooks for automated testing */
 window.__pp = {
   get G() { return G; },
-  keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED,
+  keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED, scene, camera, renderer,
   setState, setupRaceGrid, flash,
   warpRace(pos) {
     initGame();

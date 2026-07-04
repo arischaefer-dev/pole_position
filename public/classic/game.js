@@ -315,18 +315,19 @@ function arrowBoard(dir) { // dir 1 = right curve
     px(g, 0, 0, 30, 18, '#fcfcfc');
     px(g, 1, 1, 28, 16, '#fcfcfc');
     px(g, 13, 18, 4, 8, '#7c5400');
+    g.save();
+    if (dir < 0) { g.translate(30, 0); g.scale(-1, 1); }
+    // curved arrow sweeping up-right
+    g.strokeStyle = '#d81800';
+    g.lineWidth = 4;
+    g.beginPath();
+    g.arc(18, 14, 8, Math.PI, Math.PI * 1.5);
+    g.stroke();
     g.fillStyle = '#d81800';
-    // curved arrow
-    g.fillRect(6, 12, 18, 3);
-    if (dir > 0) {
-      g.fillRect(21, 6, 3, 8);
-      g.fillRect(18, 4, 6, 3);
-      g.fillRect(24, 7, 2, 2); g.fillRect(19, 2, 2, 2);
-    } else {
-      g.fillRect(6, 6, 3, 8);
-      g.fillRect(6, 4, 6, 3);
-      g.fillRect(4, 7, 2, 2); g.fillRect(9, 2, 2, 2);
-    }
+    g.beginPath();
+    g.moveTo(17, 2); g.lineTo(17, 10); g.lineTo(26, 6);
+    g.closePath(); g.fill();
+    g.restore();
   });
 }
 function flagSprite(flip) {
@@ -534,7 +535,7 @@ function updateDriving(dt, racing) {
     // throttle / brake
     if (keys['arrowup'] || keys['w']) G.speed += accelFor(G.gear, speedPct) * dt;
     else G.speed -= MAX_SPEED / 8 * dt;
-    if (keys['arrowdown'] || keys['s']) G.speed -= MAX_SPEED / 3 * dt;
+    if (keys['arrowdown'] || keys['s'] || keys[' ']) G.speed -= MAX_SPEED / 3 * dt;
     // gear caps
     const cap = (G.gear ? 1 : 0.46) * MAX_SPEED;
     if (G.speed > cap) G.speed = Math.max(cap, G.speed - MAX_SPEED / 4 * dt);
