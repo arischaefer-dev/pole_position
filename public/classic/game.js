@@ -22,9 +22,10 @@ ctx.imageSmoothingEnabled = false;
 
 function fitCanvas() {
   const availH = window.innerHeight - 40, availW = window.innerWidth - 8;
-  const s = Math.max(1, Math.floor(Math.min(availW / W, availH / H)));
-  canvas.style.width = (W * s) + 'px';
-  canvas.style.height = (H * s) + 'px';
+  const raw = Math.min(availW / W, availH / H);
+  const s = raw >= 2 ? Math.floor(raw) : Math.max(0.75, raw);
+  canvas.style.width = Math.floor(W * s) + 'px';
+  canvas.style.height = Math.floor(H * s) + 'px';
 }
 window.addEventListener('resize', fitCanvas);
 fitCanvas();
@@ -185,6 +186,17 @@ const AudioFX = {
   goal()   { this.jingle([523, 659, 784, 659, 784, 1047, 1319], 110); },
   fail()   { this.jingle([392, 330, 262, 196], 160, 0.2); }
 };
+
+/* announcer voice, approximating the arcade's digitized speech */
+function speak(txt) {
+  try {
+    if (AudioFX.muted || !window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(txt);
+    u.rate = 0.95; u.pitch = 0.55; u.volume = 0.9;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) { /* no speech support */ }
+}
 
 /* ---------------- road / track ---------------- */
 const SEG_LEN = 200;             // world units per segment
@@ -413,8 +425,41 @@ const EXT_TIME = 60;           // game seconds granted at the line each lap
 const RACE_LAPS = 3;
 const PTS_PER_LAP = 10000;     // distance points per lap (50 pts / 5 m)
 
-let topScore = 12000;
-try { topScore = Math.max(12000, parseInt(localStorage.getItem('pp_top') || '0', 10) || 0); } catch (e) {}
+/* high-score table (arcade-style ranking) */
+const DEFAULT_SCORES = [
+  { initials: 'NAM', score: 12000 }, { initials: 'ATA', score: 10000 },
+  { initials: 'FUJ', score: 8000 }, { initials: 'GPX', score: 6000 },
+  { initials: 'POL', score: 4000 }
+];
+let hiScores = DEFAULT_SCORES.slice();
+let bestEver = 0;
+try {
+  const saved = JSON.parse(localStorage.getItem('pp_scores') || 'null');
+  if (Array.isArray(saved) && saved.length) hiScores = saved;
+  else {
+    const old = parseInt(localStorage.getItem('pp_top') || '0', 10) || 0;
+    if (old > hiScores[hiScores.length - 1].score) {
+      hiScores.push({ initials: 'AAA', score: old });
+      hiScores.sort((a, b) => b.score - a.score);
+      hiScores = hiScores.slice(0, 5);
+    }
+  }
+  bestEver = parseFloat(localStorage.getItem('pp_bestlap') || '0') || 0;
+} catch (e) {}
+function insertScore(initials, score) {
+  hiScores.push({ initials, score });
+  hiScores.sort((a, b) => b.score - a.score);
+  hiScores = hiScores.slice(0, 5);
+  try { localStorage.setItem('pp_scores', JSON.stringify(hiScores)); } catch (e) {}
+}
+function noteLap(t) {
+  if (!G.bestLap || t < G.bestLap) G.bestLap = t;
+  if (!bestEver || t < bestEver) {
+    bestEver = t;
+    try { localStorage.setItem('pp_bestlap', String(t)); } catch (e) {}
+  }
+}
+let topScore = 12000;   // live HUD value; hiScores[0] is the persistent one
 
 const G = {};                  // mutable game state
 function resetPlayer() {
@@ -441,6 +486,11 @@ function initGame() {
   G.banner = null; G.bannerT = 0;
   G.bgOff = 0;
   G.finTimeBonus = 0; G.finPassBonus = 0; G.finT = 0;
+  G.bestLap = 0;
+  G.demo = false;
+  G.paused = false;
+  G.ini = null;
+  topScore = hiScores[0].score;
   resetPlayer();
 }
 initGame();
@@ -486,33 +536,114 @@ function carAhead(c) {
 
 /* ---------------- input ---------------- */
 const keys = {};
+const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function cycleInitial(dir) {
+  const ini = G.ini;
+  ini.chars[ini.slot] = (ini.chars[ini.slot] + dir + CHARSET.length) % CHARSET.length;
+  AudioFX.beep(660, 0.03, 0.08);
+}
+function confirmInitial() {
+  const ini = G.ini;
+  AudioFX.beep(880, 0.06, 0.12);
+  ini.slot++;
+  if (ini.slot >= 3) {
+    insertScore(ini.chars.map(c => CHARSET[c]).join(''), Math.floor(G.score / 10) * 10);
+    setState('scores');
+  }
+}
+function toggleGear() {
+  if (G.state === 'qualify' || G.state === 'race') {
+    G.gear = 1 - G.gear;
+    AudioFX.beep(G.gear ? 220 : 150, 0.08, 0.1);
+  }
+}
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   AudioFX.ensure();
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (e.repeat) return;
-  keys[e.key.toLowerCase()] = true;
-  if (e.key === 'Shift' || e.key.toLowerCase() === 'z') {
-    if (G.state === 'qualify' || G.state === 'race') {
-      G.gear = 1 - G.gear;
-      AudioFX.beep(G.gear ? 220 : 150, 0.08, 0.1);
+  const k = e.key.toLowerCase();
+  if (G.state === 'initials') {          // arcade initials entry
+    if (k === 'arrowleft') cycleInitial(-1);
+    else if (k === 'arrowright') cycleInitial(1);
+    else if (e.key === 'Enter' || k === 'arrowup' || e.key === ' ') confirmInitial();
+    else if (CHARSET.includes(e.key.toUpperCase())) {
+      G.ini.chars[G.ini.slot] = CHARSET.indexOf(e.key.toUpperCase());
+      confirmInitial();
     }
+    return;
   }
-  if (e.key.toLowerCase() === 'm') {
+  keys[k] = true;
+  if (e.key === 'Shift' || k === 'z') toggleGear();
+  if (k === 'm') {
     AudioFX.muted = !AudioFX.muted;
     if (AudioFX.muted && AudioFX.engineGain) AudioFX.engineGain.gain.value = 0;
   }
-  if ((e.key === 'Enter' || e.key === ' ') && G.state === 'title') {
-    startGame();
+  if (k === 'p' || e.key === 'Escape') {
+    if (['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
+      G.paused = !G.paused;
+      if (G.paused) AudioFX.engine(false, 0);
+    }
+  }
+  if (e.key === 'Enter' || e.key === ' ') {
+    if (G.state === 'title' || G.state === 'scores') startGame();
+    else if (G.state === 'gameOver') leaveGameOver(true);   // quick restart
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+/* input hook for on-screen touch controls (touch.js) */
+window.__ppInput = (k, down) => {
+  AudioFX.ensure();
+  if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
+  if (k === 'gear') { if (down) toggleGear(); return; }
+  if (k === 'enter') {
+    if (down) {
+      if (G.state === 'title' || G.state === 'scores') startGame();
+      else if (G.state === 'gameOver') leaveGameOver(true);
+      else if (G.state === 'initials') confirmInitial();
+    }
+    return;
+  }
+  if (G.state === 'initials' && down) {
+    if (k === 'arrowleft') { cycleInitial(-1); return; }
+    if (k === 'arrowright') { cycleInitial(1); return; }
+    if (k === ' ') { confirmInitial(); return; }
+  }
+  keys[k] = down;
+};
 
 function startGame() {
   initGame();
   setState('prequal');
   flash('PREPARE TO QUALIFY', 2.4);
   AudioFX.jingle([784, 784, 659, 784, 1047], 130);
+  speak('Prepare to qualify');
+}
+function leaveGameOver(quick) {
+  if (Math.floor(G.score / 10) * 10 > hiScores[hiScores.length - 1].score) {
+    G.ini = { chars: [0, 0, 0], slot: 0 };
+    setState('initials');
+  } else if (quick) startGame();
+  else setState('scores');
+}
+
+/* attract-mode autopilot */
+const demoKeys = {};
+function key(k) { return G.demo ? demoKeys[k] : keys[k]; }
+function demoInput() {
+  const look = segAt((G.pos + 1400) % TRACK_LEN).curve;
+  const here = segAt(G.pos).curve;
+  const cur = Math.abs(look) > Math.abs(here) ? look : here;
+  const sp = G.speed / MAX_SPEED;
+  demoKeys['arrowup'] = true;
+  demoKeys['arrowdown'] = (Math.abs(cur) > 4.5 && sp > 0.6) ||
+                          (Math.abs(cur) > 2.5 && sp > 0.85);
+  if (sp > 0.42 && G.gear === 0 && G.crashed <= 0) G.gear = 1;
+  if (G.crashed > 0) G.gear = 0;
+  const err = -G.playerX * 1.4 - cur * 0.5 * sp;
+  demoKeys['arrowleft'] = err < -0.04;
+  demoKeys['arrowright'] = err > 0.04;
 }
 
 /* ---------------- update ---------------- */
@@ -533,9 +664,9 @@ function updateDriving(dt, racing) {
     if (G.crashed <= 0) { G.crashed = 0; G.playerX = Math.max(-0.8, Math.min(0.8, G.playerX)); G.gear = 0; }
   } else {
     // throttle / brake
-    if (keys['arrowup'] || keys['w']) G.speed += accelFor(G.gear, speedPct) * dt;
+    if (key('arrowup') || key('w')) G.speed += accelFor(G.gear, speedPct) * dt;
     else G.speed -= MAX_SPEED / 8 * dt;
-    if (keys['arrowdown'] || keys['s'] || keys[' ']) G.speed -= MAX_SPEED / 3 * dt;
+    if (key('arrowdown') || key('s') || key(' ')) G.speed -= MAX_SPEED / 3 * dt;
     // gear caps
     const cap = (G.gear ? 1 : 0.46) * MAX_SPEED;
     if (G.speed > cap) G.speed = Math.max(cap, G.speed - MAX_SPEED / 4 * dt);
@@ -550,8 +681,8 @@ function updateDriving(dt, racing) {
     // steering
     const sp = G.speed / MAX_SPEED;
     let st = 0;
-    if (keys['arrowleft'] || keys['a']) st = -1;
-    if (keys['arrowright'] || keys['d']) st = 1;
+    if (key('arrowleft') || key('a')) st = -1;
+    if (key('arrowright') || key('d')) st = 1;
     G.steer = st;
     const dx = dt * 2.2 * sp;
     G.playerX += st * dx;
@@ -646,6 +777,30 @@ function update(dt) {
   switch (G.state) {
     case 'title':
       G.bgOff += dt * 4;
+      // attract mode: after a moment the game drives itself
+      if (!G.demo && G.stateT > 2) {
+        G.demo = true;
+        resetPlayer();
+      }
+      if (G.demo) {
+        demoInput();
+        updateDriving(dt, false);
+      }
+      if (G.stateT > 14) {
+        G.demo = false;
+        AudioFX.engine(false, 0);
+        setState('scores');
+      }
+      break;
+
+    case 'scores':
+      if (G.stateT > 6) {
+        G.cars = [];
+        setState('title');
+      }
+      break;
+
+    case 'initials':
       break;
 
     case 'prequal':
@@ -677,6 +832,7 @@ function update(dt) {
       const crossed = updateDriving(dt, false);
       if (crossed) {
         G.qualTime = G.lapTime;
+        noteLap(G.qualTime);
         AudioFX.engine(false, 0);
         if (G.qualTime <= 73.0) {
           for (const [t, p, b] of QUAL_TABLE)
@@ -702,6 +858,7 @@ function update(dt) {
         setupRaceGrid();
         G.timer = RACE_TIME; G.lap = 1; G.lapTime = 0; G.passed = 0;
         setState('lightsR');
+        speak('Prepare to race');
       }
       break;
 
@@ -718,13 +875,20 @@ function update(dt) {
           G.lapArmed = true;         // crossing starts lap 1
           G.lapTime = 0;
         } else if (G.lap >= RACE_LAPS) {
+          noteLap(G.lapTime);
           finishRace();
           break;
         } else {
+          noteLap(G.lapTime);
           G.lap++;
           G.lapTime = 0;
           G.timer += EXT_TIME;
-          flash('EXTENDED PLAY!', 1.6);
+          if (G.lap === RACE_LAPS) {
+            flash('FINAL LAP!', 2);
+            speak('Final lap');
+          } else {
+            flash('EXTENDED PLAY!', 1.6);
+          }
           AudioFX.extend();
         }
       }
@@ -765,20 +929,18 @@ function update(dt) {
     }
 
     case 'gameOver':
-      if (G.stateT > 3.4) setState('title');
+      if (G.stateT > 3.4) leaveGameOver(false);
       break;
   }
 
-  if (G.score > topScore) {
-    topScore = Math.floor(G.score);
-    try { localStorage.setItem('pp_top', String(topScore)); } catch (e) {}
-  }
+  if (G.score > topScore) topScore = Math.floor(G.score);
 }
 function finishRace() {
   setState('finish');
   G.finT = 0; G.finTimeBonus = 0; G.finPassBonus = 0;
   flash('GOAL!', 2.2);
   AudioFX.goal();
+  speak('Congratulations');
 }
 function gameOver() {
   AudioFX.engine(false, 0);
@@ -881,7 +1043,13 @@ function renderRoad() {
 
     // queue this segment's sprites + cars (project at segment start)
     const drawList = [];
-    for (const sp of seg.sprites) drawList.push({ off: sp.offset, kind: sp.kind, pct: 0 });
+    for (const sp of seg.sprites) {
+      // checkered flags blink on the final lap
+      if ((sp.kind === 'flagL' || sp.kind === 'flagR') &&
+          (G.state === 'race' || G.state === 'finish') &&
+          G.lap === RACE_LAPS && frame % 16 < 8) continue;
+      drawList.push({ off: sp.offset, kind: sp.kind, pct: 0 });
+    }
     for (const c of G.cars) {
       const cSegI = Math.floor(((c.z % TRACK_LEN) + TRACK_LEN) / SEG_LEN) % N_SEGS;
       if (cSegI === seg.i)
@@ -912,7 +1080,8 @@ function renderRoad() {
 }
 
 function renderPlayer() {
-  const driving = ['qualify', 'race', 'finish', 'timeUp', 'lightsQ', 'lightsR'].includes(G.state);
+  const driving = ['qualify', 'race', 'finish', 'timeUp', 'lightsQ', 'lightsR'].includes(G.state) ||
+    (G.state === 'title' && G.demo);
   if (!driving) return;
   const bounce = G.speed > MAX_SPEED * 0.1 ? (frame % 6 < 3 ? 0 : 1) : 0;
   const px0 = Math.round(W / 2 - 20);
@@ -985,6 +1154,8 @@ function renderHUD() {
     drawText(G.lap + '/' + RACE_LAPS, 232, 11, C.hudCyan);
   else if (G.state === 'qualify')
     drawText('QUAL', 232, 11, C.hudCyan);
+  if (G.bestLap && inRace)
+    drawText('B ' + fmtLap(G.bestLap), 174, 11, C.hudWhite);
   // row 2
   drawText('SCORE', 6, 11, C.hudYel);
   drawText(String(Math.floor(G.score / 10) * 10), 42, 11, C.hudWhite);
@@ -1012,14 +1183,45 @@ function renderBanner() {
 function renderStateOverlays() {
   switch (G.state) {
     case 'title': {
-      // road perspective behind title
+      // road perspective (or attract demo) behind title
       drawTextC('POLE', 44, C.hudRed, 3);
       drawTextC('POSITION', 70, C.hudRed, 3);
       drawTextC('TOP SCORE ' + topScore, 108, C.hudYel);
-      if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 132, C.hudWhite);
-      drawTextC('QUALIFY IN UNDER 73"00', 156, C.hudCyan);
-      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS', 168, C.hudCyan);
-      ctx.drawImage(SPR.player, W / 2 - 20, 184);
+      if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
+      if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 136, C.hudWhite);
+      drawTextC('QUALIFY IN UNDER 73"00', 158, C.hudCyan);
+      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS', 170, C.hudCyan);
+      break;
+    }
+    case 'scores': {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(24, 52, W - 48, 122);
+      drawTextC('HIGH SCORES', 58, C.hudRed, 2);
+      hiScores.forEach((s, i) => {
+        const y = 84 + i * 14;
+        drawText(String(i + 1), 62, y, C.hudYel);
+        drawText(s.initials, 86, y, C.hudWhite);
+        drawText(String(s.score), 190 - textW(String(s.score)), y, C.hudCyan);
+      });
+      if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 160, C.hudWhite);
+      break;
+    }
+    case 'initials': {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(24, 60, W - 48, 110);
+      drawTextC('GREAT SCORE!', 66, C.hudYel, 2);
+      drawTextC(String(Math.floor(G.score / 10) * 10), 88, C.hudWhite);
+      drawTextC('ENTER YOUR INITIALS', 104, C.hudCyan);
+      const x0 = W / 2 - 27;
+      for (let i = 0; i < 3; i++) {
+        const cur = i === G.ini.slot;
+        const ch = CHARSET[G.ini.chars[i]];
+        if (!cur || frame % 16 < 10)
+          drawText(ch, x0 + i * 20, 122, cur ? C.hudRed : C.hudWhite, 2);
+        ctx.fillStyle = cur ? C.hudRed : '#555';
+        ctx.fillRect(x0 + i * 20, 138, 11, 2);
+      }
+      drawTextC('ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
       break;
     }
     case 'qualDone': {
@@ -1072,6 +1274,11 @@ function render() {
   renderHUD();
   renderBanner();
   renderStateOverlays();
+  if (G.paused && Math.floor(performance.now() / 350) % 2 === 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(W / 2 - 40, 100, 80, 16);
+    drawTextC('PAUSED', 104, C.hudYel);
+  }
 }
 
 /* ---------------- main loop ---------------- */
@@ -1082,7 +1289,7 @@ function loop(now) {
   last = now;
   if (dt > 0.1) dt = 0.1;
   acc += dt;
-  while (acc >= STEP) { update(STEP); acc -= STEP; }
+  while (acc >= STEP) { if (!G.paused) update(STEP); acc -= STEP; }
   render();
   requestAnimationFrame(loop);
 }
