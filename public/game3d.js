@@ -215,18 +215,32 @@ const HALF_W = 5.5;                      // road half width, meters
 const N_SAMP = 1600;
 
 /* x is negated vs the drawing-board sketch so the turns read correctly
-   on screen (screen-right for a forward camera is world -x). */
+   on screen (screen-right for a forward camera is world -x).
+   Tight corners are generated as true circular arcs — hand-placed
+   Catmull-Rom points overshoot badly at hairpin-scale curvature. */
+function arcPts(cx, cz, r, a0deg, a1deg, n) {
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (a0deg + (a1deg - a0deg) * i / n) * Math.PI / 180;
+    out.push([cx + r * Math.cos(a), cz + r * Math.sin(a)]);
+  }
+  return out;
+}
 const CP_RAW = [
   [0, -90], [0, 150], [0, 400], [0, 600],              // front straight
   [-30, 700], [-130, 730], [-230, 690],                // T1 sharp right
   [-330, 660], [-430, 680], [-530, 650],               // easy left kink
   [-640, 600], [-700, 480], [-650, 360], [-540, 320],  // sweeping right horseshoe
-  [-430, 300], [-330, 310],                            // run back
-  [-250, 350], [-215, 430],                            // right lead-in
-  [-200, 510], [-165, 540], [-130, 500],               // LEFT HAIRPIN
-  [-120, 420], [-150, 330],                            // exit
-  [-170, 150], [-140, 20], [-70, -140], [0, -190]      // long gradual right onto straight
-];   // [0,-190] -> [0,-90] -> [0,150] keeps the grid + start line dead straight
+  [-430, 300], [-380, 302],                            // run back
+  ...arcPts(-330, 400, 90, 270, 360, 4),               // right lead-in quarter arc
+  [-238, 445],
+  ...arcPts(-168, 490, 66, 180, 0, 6),                 // LEFT HAIRPIN (min r ~24m)
+  [-104, 452], [-114, 412], [-135, 362],               // graduated exit
+  [-170, 230], [-195, 60], [-206, -80],                // descent to the cap
+  [-210, -150], [-210, -192],
+  ...arcPts(-105, -235, 105, 180, 360, 6),             // wide cap arc onto the straight
+  [0, -160]
+];   // [0,-235 arc end] -> [0,-160] -> [0,-90] -> [0,150] keeps the grid straight
 
 function buildTrackCurve() {
   const mk = (k) => new THREE.CatmullRomCurve3(
