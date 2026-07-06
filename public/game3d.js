@@ -656,7 +656,9 @@ let puddleMat = null;     // shared puddle material (shimmers)
       hazards.push({ s, x: side, kind: 'sign' });
     }
   }
-  // billboards on straights
+  // billboards on straights (the COLA boards use the real logo art)
+  const colaTex = new THREE.TextureLoader().load('img/cola.png');
+  colaTex.colorSpace = THREE.SRGBColorSpace;
   const boards = [
     ['GP', '#0058f8', '#fcfcfc'], ['COLA', '#d81800', '#fcfcfc'],
     ['TIRE', '#000000', '#f8b800'], ['OIL', '#f8b800', '#000000'],
@@ -677,7 +679,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
   spots.forEach((s, i) => {
     const side = (i % 2 ? 1 : -1) * (HALF_W + 4.5);
     const [t, bg, fg] = boards[i];
-    const m = makeSignMesh(billboardTex(t, bg, fg), 8, 4, 1.6);
+    const m = makeSignMesh(t === 'COLA' ? colaTex : billboardTex(t, bg, fg), 8, 4, 1.6);
     posAt(s, side, m.position);
     m.rotation.y = headingAt(s) + Math.PI;
     scene.add(m);

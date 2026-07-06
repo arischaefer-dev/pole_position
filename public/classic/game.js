@@ -415,6 +415,16 @@ const SPR = {
     px(g, 8, 1, 12, 1, '#3cbcfc');
   })
 };
+// paint the real logo art onto the COLA billboards once it loads
+{
+  const img = new Image();
+  img.onload = () => {
+    const g = SPR.bbCOLA.getContext('2d');
+    g.drawImage(img, 2, 2, 44, 18);
+  };
+  img.src = '/img/cola.png';
+}
+
 const SPRITE_WORLD_W = {   // world-unit widths for projection
   playerL: 700, player: 700, playerR: 700,
   car0: 700, car1: 700, car2: 700, car3: 700,
