@@ -113,24 +113,35 @@ const AudioFX = {
     // engine: two oscillators through a lowpass
     const lp = this.ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 900;
+    this.lp = lp;
     this.engineGain = this.ctx.createGain();
     this.engineGain.gain.value = 0;
     this.engineOsc = this.ctx.createOscillator();
     this.engineOsc.type = 'sawtooth'; this.engineOsc.frequency.value = 55;
     this.engineOsc2 = this.ctx.createOscillator();
     this.engineOsc2.type = 'square'; this.engineOsc2.frequency.value = 28;
+    this.engineOsc3 = this.ctx.createOscillator();      // detuned growl layer
+    this.engineOsc3.type = 'sawtooth'; this.engineOsc3.frequency.value = 55.8;
     const g2 = this.ctx.createGain(); g2.gain.value = 0.5;
+    const g3 = this.ctx.createGain(); g3.gain.value = 0.35;
     this.engineOsc.connect(this.engineGain);
     this.engineOsc2.connect(g2); g2.connect(this.engineGain);
+    this.engineOsc3.connect(g3); g3.connect(this.engineGain);
     this.engineGain.connect(lp); lp.connect(this.master);
-    this.engineOsc.start(); this.engineOsc2.start();
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.value = 5.5;
+    const lfoGain = this.ctx.createGain();
+    lfoGain.gain.value = 90;
+    lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
+    lfo.start();
+    this.engineOsc.start(); this.engineOsc2.start(); this.engineOsc3.start();
     // noise buffer for crash / skid
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   },
-  engine(on, rpm) {           // rpm 0..1
+  engine(on, rpm, hiGear) {   // rpm 0..1
     if (!this.ctx || this.muted) return;
     const t = this.ctx.currentTime;
     this.engineGain.gain.setTargetAtTime(on ? 0.12 : 0, t, 0.05);
@@ -138,7 +149,38 @@ const AudioFX = {
       const f = 45 + rpm * 190;
       this.engineOsc.frequency.setTargetAtTime(f, t, 0.03);
       this.engineOsc2.frequency.setTargetAtTime(f / 2, t, 0.03);
+      this.engineOsc3.frequency.setTargetAtTime(f * 1.013, t, 0.03);
+      this.lp.frequency.setTargetAtTime(hiGear ? 1150 : 750, t, 0.1);
     }
+  },
+  whoosh() {                      // pass-by
+    if (!this.ctx || this.muted) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 1.5;
+    const t = this.ctx.currentTime;
+    bp.frequency.setValueAtTime(350, t);
+    bp.frequency.exponentialRampToValueAtTime(1900, t + 0.18);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    src.connect(bp); bp.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + 0.3);
+  },
+  cheer() {                       // crowd at the finish
+    if (!this.ctx || this.muted) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    src.loop = true;
+    const lp2 = this.ctx.createBiquadFilter();
+    lp2.type = 'lowpass'; lp2.frequency.value = 1300;
+    const g = this.ctx.createGain(), t = this.ctx.currentTime;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.4);
+    src.connect(lp2); lp2.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + 2.5);
   },
   beep(freq, dur, vol, type) {
     if (!this.ctx || this.muted) return;
@@ -420,9 +462,19 @@ const QUAL_TABLE = [           // [max lap time, grid pos, bonus]
 ];
 const GAME_TIME_RATE = 2;      // game seconds per real second (arcade ticks fast)
 const QUAL_TIME = 90;          // game seconds on the qualifying clock
-const RACE_TIME = 90;          // game seconds at race start
-const EXT_TIME = 60;           // game seconds granted at the line each lap
-const RACE_LAPS = 3;
+/* operator "dip switch" settings, same ranges as the arcade cabinet */
+const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60] };
+const DIP = { laps: 3, time: 90, ext: 60 };
+try {
+  const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
+  for (const k of Object.keys(DIP))
+    if (DIP_CHOICES[k].includes(d[k])) DIP[k] = d[k];
+} catch (e) {}
+let RACE_TIME = DIP.time, EXT_TIME = DIP.ext, RACE_LAPS = DIP.laps;
+function applyDip() {
+  RACE_TIME = DIP.time; EXT_TIME = DIP.ext; RACE_LAPS = DIP.laps;
+  try { localStorage.setItem('pp_dip', JSON.stringify(DIP)); } catch (e) {}
+}
 const PTS_PER_LAP = 10000;     // distance points per lap (50 pts / 5 m)
 
 /* high-score table (arcade-style ranking) */
@@ -470,6 +522,7 @@ function resetPlayer() {
   G.steer = 0;
   G.crashed = 0;          // >0 = crash timer (real seconds)
   G.blink = 0;
+  G.invuln = 0; G.shiftCut = 0;
 }
 function initGame() {
   G.state = 'title';
@@ -500,7 +553,7 @@ function flash(msg, t) { G.banner = msg; G.bannerT = t || 2; }
 
 /* rival + traffic cars */
 function makeCar(z, offset, maxPct, spr) {
-  return { z, offset, speed: 0, maxPct, spr, ahead: true, rival: true };
+  return { z, offset, speed: 0, maxPct, spr, ahead: true, rival: true, phase: z * 0.001 + offset };
 }
 function setupRaceGrid() {
   G.cars = [];
@@ -554,7 +607,22 @@ function confirmInitial() {
 function toggleGear() {
   if (G.state === 'qualify' || G.state === 'race') {
     G.gear = 1 - G.gear;
+    G.shiftCut = 0.15;             // brief torque cut for mechanical feel
     AudioFX.beep(G.gear ? 220 : 150, 0.08, 0.1);
+  }
+}
+const DIP_ROWS = [
+  ['LAPS', 'laps'], ['GAME TIME', 'time'], ['EXTENDED TIME', 'ext']
+];
+function optionsInput(k) {
+  if (k === 'arrowup') G.optSel = (G.optSel + 2) % 3;
+  else if (k === 'arrowdown') G.optSel = (G.optSel + 1) % 3;
+  else if (k === 'arrowleft' || k === 'arrowright') {
+    const key = DIP_ROWS[G.optSel][1];
+    const list = DIP_CHOICES[key];
+    const dir = k === 'arrowright' ? 1 : -1;
+    DIP[key] = list[(list.indexOf(DIP[key]) + dir + list.length) % list.length];
+    AudioFX.beep(660, 0.03, 0.08);
   }
 }
 window.addEventListener('keydown', (e) => {
@@ -563,6 +631,14 @@ window.addEventListener('keydown', (e) => {
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  if (G.state === 'options') {           // operator dip-switch menu
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) optionsInput(k);
+    else if (e.key === 'Enter' || e.key === 'Escape' || k === 'o') {
+      applyDip();
+      setState('title');
+    }
+    return;
+  }
   if (G.state === 'initials') {          // arcade initials entry
     if (k === 'arrowleft') cycleInitial(-1);
     else if (k === 'arrowright') cycleInitial(1);
@@ -584,6 +660,12 @@ window.addEventListener('keydown', (e) => {
       G.paused = !G.paused;
       if (G.paused) AudioFX.engine(false, 0);
     }
+  }
+  if (k === 'o' && (G.state === 'title' || G.state === 'scores')) {
+    G.demo = false;
+    AudioFX.engine(false, 0);
+    G.optSel = 0;
+    setState('options');
   }
   if (e.key === 'Enter' || e.key === ' ') {
     if (G.state === 'title' || G.state === 'scores') startGame();
@@ -661,11 +743,19 @@ function updateDriving(dt, racing) {
   if (G.crashed > 0) {
     G.crashed -= dt;
     G.speed = Math.max(0, G.speed - MAX_SPEED * dt);
-    if (G.crashed <= 0) { G.crashed = 0; G.playerX = Math.max(-0.8, Math.min(0.8, G.playerX)); G.gear = 0; }
+    if (G.crashed <= 0) {
+      G.crashed = 0;
+      G.playerX = Math.max(-0.8, Math.min(0.8, G.playerX));
+      G.gear = 0;
+      G.invuln = 2.0;              // blinking grace period after respawn
+    }
   } else {
+    if (G.invuln > 0) G.invuln -= dt;
+    if (G.shiftCut > 0) G.shiftCut -= dt;
     // throttle / brake
-    if (key('arrowup') || key('w')) G.speed += accelFor(G.gear, speedPct) * dt;
-    else G.speed -= MAX_SPEED / 8 * dt;
+    if ((key('arrowup') || key('w')) && G.shiftCut <= 0)
+      G.speed += accelFor(G.gear, speedPct) * dt;
+    else if (!(key('arrowup') || key('w'))) G.speed -= MAX_SPEED / 8 * dt;
     if (key('arrowdown') || key('s') || key(' ')) G.speed -= MAX_SPEED / 3 * dt;
     // gear caps
     const cap = (G.gear ? 1 : 0.46) * MAX_SPEED;
@@ -703,7 +793,8 @@ function updateDriving(dt, racing) {
             AudioFX.skid();
           }
         } else if (sp2.kind !== 'flagL' && sp2.kind !== 'flagR') {
-          if (Math.abs(G.playerX - sp2.offset) < ww + 0.12 && G.speed > MAX_SPEED * 0.05) {
+          if (Math.abs(G.playerX - sp2.offset) < ww + 0.12 && G.speed > MAX_SPEED * 0.05 &&
+              G.invuln <= 0) {
             doCrash();
           }
         }
@@ -728,7 +819,7 @@ function updateDriving(dt, racing) {
   // engine sound
   const cap = (G.gear ? 1 : 0.46);
   AudioFX.engine(G.crashed <= 0 && G.speed > 1,
-    Math.min(1, (G.speed / MAX_SPEED) / cap) * (G.gear ? 0.85 : 1));
+    Math.min(1, (G.speed / MAX_SPEED) / cap) * (G.gear ? 0.85 : 1), G.gear === 1);
 
   return crossed;
 }
@@ -739,7 +830,8 @@ function updateCars(dt) {
     const cseg = segAt(c.z);
     // rivals brake for corners, traffic just cruises
     const safe = 1 - Math.min(0.5, Math.abs(cseg.curve) * (c.rival ? 0.055 : 0.09));
-    const target = MAX_SPEED * c.maxPct * safe;
+    const surge = 1 + 0.04 * Math.sin(frame * 0.007 + (c.phase || 0));
+    const target = MAX_SPEED * c.maxPct * safe * surge;
     c.speed += Math.min(1, dt * 0.5) * (target - c.speed);
     c.z = (c.z + c.speed * dt) % TRACK_LEN;
     // gentle drift toward a racing line
@@ -748,11 +840,15 @@ function updateCars(dt) {
 
     // pass detection
     const nowAhead = carAhead(c);
-    if (c.ahead && !nowAhead && G.crashed <= 0) { G.passed++; AudioFX.beep(880, 0.05, 0.08); }
+    if (c.ahead && !nowAhead && G.crashed <= 0) {
+      G.passed++;
+      AudioFX.beep(880, 0.05, 0.08);
+      if (Math.abs(c.offset - G.playerX) < 0.8) AudioFX.whoosh();
+    }
     c.ahead = nowAhead;
 
     // collision with player
-    if (G.crashed <= 0) {
+    if (G.crashed <= 0 && G.invuln <= 0) {
       let dz = (c.z - G.pos + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
       if (dz > -SEG_LEN && dz < SEG_LEN * 1.2 &&
           Math.abs(c.offset - G.playerX) < 0.3 && G.speed > MAX_SPEED * 0.08) {
@@ -786,6 +882,11 @@ function update(dt) {
         demoInput();
         updateDriving(dt, false);
       }
+      G._jingleT = (G._jingleT || 0) + dt;
+      if (G._jingleT > 8 && AudioFX.ctx) {
+        G._jingleT = 0;
+        AudioFX.jingle([659, 784, 880, 784, 1047, 880, 1319], 130, 0.1);
+      }
       if (G.stateT > 14) {
         G.demo = false;
         AudioFX.engine(false, 0);
@@ -801,6 +902,7 @@ function update(dt) {
       break;
 
     case 'initials':
+    case 'options':
       break;
 
     case 'prequal':
@@ -940,6 +1042,7 @@ function finishRace() {
   G.finT = 0; G.finTimeBonus = 0; G.finPassBonus = 0;
   flash('GOAL!', 2.2);
   AudioFX.goal();
+  AudioFX.cheer();
   speak('Congratulations');
 }
 function gameOver() {
@@ -1090,6 +1193,7 @@ function renderPlayer() {
     renderExplosion(px0 + 20, py - 10);
     return;
   }
+  if (G.invuln > 0 && frame % 6 < 3) return;   // respawn blink
   let spr = SPR.player;
   if (G.steer < 0) spr = SPR.playerL;
   else if (G.steer > 0) spr = SPR.playerR;
@@ -1190,7 +1294,7 @@ function renderStateOverlays() {
       if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
       if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 136, C.hudWhite);
       drawTextC('QUALIFY IN UNDER 73"00', 158, C.hudCyan);
-      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS', 170, C.hudCyan);
+      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS  - O OPTIONS', 170, C.hudCyan);
       break;
     }
     case 'scores': {
@@ -1204,6 +1308,19 @@ function renderStateOverlays() {
         drawText(String(s.score), 190 - textW(String(s.score)), y, C.hudCyan);
       });
       if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 160, C.hudWhite);
+      break;
+    }
+    case 'options': {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(24, 52, W - 48, 122);
+      drawTextC('OPTIONS', 58, C.hudRed, 2);
+      DIP_ROWS.forEach(([label, key], i) => {
+        const y = 90 + i * 16;
+        const sel = i === G.optSel;
+        drawText((sel ? '>' : ' ') + label, 48, y, sel ? C.hudYel : C.hudWhite);
+        drawText(String(DIP[key]), 186, y, sel ? C.hudYel : C.hudCyan);
+      });
+      drawTextC('ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
       break;
     }
     case 'initials': {
