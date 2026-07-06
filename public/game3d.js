@@ -614,7 +614,9 @@ let puddleMat = null;     // shared puddle material (shimmers)
   }
   // start gantry
   const gant = new THREE.Group();
-  const postMat = new THREE.MeshLambertMaterial({ color: 0xd81800 });
+  // unlit bright red: Lambert shading made the posts read as black
+  // slabs when sweeping past the camera at the start line
+  const postMat = new THREE.MeshBasicMaterial({ color: 0xd81800 });
   for (const px of [-(HALF_W + 1.6), HALF_W + 1.6]) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 8, 0.5), postMat);
     post.position.set(px, 4, 0);
@@ -638,11 +640,12 @@ let puddleMat = null;     // shared puddle material (shimmers)
     banner.rotation.y = flip;
     gant.add(banner);
   }
-  // countdown lights hanging under the crossbar
+  // countdown lights sit on TOP of the banner — hanging them below put
+  // them at lens height, where they loomed as huge blobs during passage
   for (let i = 0; i < 3; i++) {
     const lm = new THREE.MeshBasicMaterial({ color: 0x3a0000 });
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.5), lm);
-    box.position.set((i - 1) * 2.2, 6.1, 0);
+    box.position.set((i - 1) * 2.2, 8.8, 0);
     gant.add(box);
     startLights.push(lm);
   }
@@ -685,12 +688,37 @@ let puddleMat = null;     // shared puddle material (shimmers)
     for (let x = 0; x < 256; x += 32) g.fillRect(x, 0, 16, 9);
     g.fillStyle = '#686868'; g.fillRect(0, 74, 256, 22);
   });
+  const standGray = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
+  const standRed = new THREE.MeshLambertMaterial({ color: 0xd81800 });
   for (const [s0, side] of [[55, -1], [135, -1], [95, 1], [1950, 1]]) {
-    const stand = new THREE.Mesh(
-      new THREE.PlaneGeometry(64, 9),
-      new THREE.MeshBasicMaterial({ map: standTex, side: THREE.DoubleSide }));
-    posAt(s0, side * (HALF_W + 17), stand.position);
-    stand.position.y = 4.5;
+    // proper 3D bleachers: tilted crowd face, walls, roof on posts
+    const stand = new THREE.Group();
+    const crowd = new THREE.Mesh(
+      new THREE.PlaneGeometry(64, 10),
+      new THREE.MeshBasicMaterial({ map: standTex }));
+    crowd.rotation.x = -0.55;                 // seats lean back away from the road
+    crowd.position.y = 4.4;
+    stand.add(crowd);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(64, 8.7, 0.4), standGray);
+    back.position.set(0, 4.3, -2.9);
+    stand.add(back);
+    for (const sx of [-32.1, 32.1]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8.7, 5.8), standGray);
+      wall.position.set(sx, 4.3, -0.2);
+      stand.add(wall);
+    }
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(66, 0.5, 7.4), standGray);
+    roof.position.set(0, 9.2, -0.3);
+    stand.add(roof);
+    const fascia = new THREE.Mesh(new THREE.BoxGeometry(66, 0.7, 0.5), standRed);
+    fascia.position.set(0, 9.2, 3.3);
+    stand.add(fascia);
+    for (const px of [-30, 30]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9, 0.4), standGray);
+      post.position.set(px, 4.5, 3.1);
+      stand.add(post);
+    }
+    posAt(s0, side * (HALF_W + 19), stand.position);
     stand.rotation.y = headingAt(s0) + side * Math.PI / 2;
     scene.add(stand);
   }
@@ -752,13 +780,16 @@ function buildF1(body, accent) {
     w.rotation.order = 'YXZ';
     grp.userData.wheels.push({ m: w, r, front: wz > 0 });
   }
-  // contact shadow
+  // contact shadow — polygonOffset must beat the road's -2 or it z-fights
   const shadow = new THREE.Mesh(
     new THREE.CircleGeometry(1, 14),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
+    new THREE.MeshBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+    }));
   shadow.rotation.x = -Math.PI / 2;
   shadow.scale.set(1.9, 3.0, 1);
-  shadow.position.y = 0.02;
+  shadow.position.y = 0.05;
   grp.add(shadow);
   return grp;
 }
@@ -1770,6 +1801,13 @@ window.__ppInput = (k, down) => {
   AudioFX.ensure();
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (k === 'gear') { if (down) toggleGear(); return; }
+  if (k === 'pause') {
+    if (down && ['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
+      G.paused = !G.paused;
+      if (G.paused) AudioFX.engine(false, 0);
+    }
+    return;
+  }
   if (k === 'enter') {
     if (down) {
       if (G.state === 'title' || G.state === 'scores') startGame();

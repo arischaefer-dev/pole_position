@@ -679,6 +679,13 @@ window.__ppInput = (k, down) => {
   AudioFX.ensure();
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (k === 'gear') { if (down) toggleGear(); return; }
+  if (k === 'pause') {
+    if (down && ['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
+      G.paused = !G.paused;
+      if (G.paused) AudioFX.engine(false, 0);
+    }
+    return;
+  }
   if (k === 'enter') {
     if (down) {
       if (G.state === 'title' || G.state === 'scores') startGame();

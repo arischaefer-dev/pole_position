@@ -27,21 +27,25 @@
         #tc-gas   { right: 12px; bottom: 18px; width: 84px; height: 84px; font-size: 18px; }
         #tc-brk   { right: 106px; bottom: 18px; width: 64px; height: 64px; font-size: 15px; }
         #tc-gear  { right: 12px; bottom: 114px; width: 64px; height: 44px; font-size: 14px; }
-        #tc-start { left: 50%; transform: translateX(-50%); bottom: 18px;
-          width: 92px; height: 40px; font-size: 15px; }
+        /* start + pause live in a bar ABOVE the play area so nothing overlaps */
+        #tc-start { left: 50%; transform: translateX(-108%); top: 8px;
+          width: 92px; height: 38px; font-size: 15px; }
+        #tc-pause { left: 50%; transform: translateX(8%); top: 8px;
+          width: 92px; height: 38px; font-size: 15px; }
       </style>
       <div class="tbtn" id="tc-left">&#9664;</div>
       <div class="tbtn" id="tc-right">&#9654;</div>
       <div class="tbtn" id="tc-gas">GAS</div>
       <div class="tbtn" id="tc-brk">BRK</div>
       <div class="tbtn" id="tc-gear">GEAR</div>
-      <div class="tbtn" id="tc-start">START</div>`;
+      <div class="tbtn" id="tc-start">START</div>
+      <div class="tbtn" id="tc-pause">&#10074;&#10074; / &#9654;</div>`;
     document.body.appendChild(wrap);
 
     const map = {
       'tc-left': 'arrowleft', 'tc-right': 'arrowright',
       'tc-gas': 'arrowup', 'tc-brk': ' ',
-      'tc-gear': 'gear', 'tc-start': 'enter'
+      'tc-gear': 'gear', 'tc-start': 'enter', 'tc-pause': 'pause'
     };
     for (const [id, keyName] of Object.entries(map)) {
       const el = document.getElementById(id);
