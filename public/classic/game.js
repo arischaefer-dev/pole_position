@@ -415,14 +415,17 @@ const SPR = {
     px(g, 8, 1, 12, 1, '#3cbcfc');
   })
 };
-// paint the real logo art onto the COLA billboards once it loads
-{
+// paint the real sponsor / venue art onto the billboards once loaded
+for (const [sprName, file] of [
+  ['bbGP', 'pepsi'], ['bbCOLA', 'cola'], ['bbTIRE', 'michelin'],
+  ['bbOIL', 'castrol'], ['bbRACE', 'fuji']
+]) {
   const img = new Image();
   img.onload = () => {
-    const g = SPR.bbCOLA.getContext('2d');
+    const g = SPR[sprName].getContext('2d');
     g.drawImage(img, 2, 2, 44, 18);
   };
-  img.src = '/img/cola.png';
+  img.src = '/img/' + file + '.png';
 }
 
 const SPRITE_WORLD_W = {   // world-unit widths for projection

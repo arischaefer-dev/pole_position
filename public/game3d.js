@@ -693,15 +693,18 @@ let puddleMat = null;     // shared puddle material (shimmers)
       hazards.push({ s, x: side, kind: 'sign' });
     }
   }
-  // billboards on straights (the COLA boards use the real logo art)
-  const colaTex = new THREE.TextureLoader().load('img/cola.png');
-  colaTex.colorSpace = THREE.SRGBColorSpace;
-  const boards = [
-    ['GP', '#0058f8', '#fcfcfc'], ['COLA', '#d81800', '#fcfcfc'],
-    ['TIRE', '#000000', '#f8b800'], ['OIL', '#f8b800', '#000000'],
-    ['RACE', '#00a800', '#fcfcfc'], ['GP', '#0058f8', '#fcfcfc'],
-    ['COLA', '#d81800', '#fcfcfc'], ['TIRE', '#000000', '#f8b800']
-  ];
+  // billboards on straights — real sponsor / venue art
+  const boardTexCache = {};
+  const loader = new THREE.TextureLoader();
+  const boardTex = (name) => {
+    if (!boardTexCache[name]) {
+      boardTexCache[name] = loader.load('img/' + name + '.png');
+      boardTexCache[name].colorSpace = THREE.SRGBColorSpace;
+    }
+    return boardTexCache[name];
+  };
+  const boards = ['pepsi', 'cola', 'michelin', 'castrol',
+                  'fuji', 'pepsi', 'cola', 'michelin'];
   // pick straight spots: low curvature, spaced apart
   const spots = [];
   let sScan = 40;
@@ -715,8 +718,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
   }
   spots.forEach((s, i) => {
     const side = (i % 2 ? 1 : -1) * (HALF_W + 4.5);
-    const [t, bg, fg] = boards[i];
-    const m = makeSignMesh(t === 'COLA' ? colaTex : billboardTex(t, bg, fg), 8, 4, 1.6);
+    const m = makeSignMesh(boardTex(boards[i]), 8, 4, 1.6);
     posAt(s, side, m.position);
     m.rotation.y = headingAt(s) + Math.PI;
     scene.add(m);
@@ -839,6 +841,17 @@ let puddleMat = null;     // shared puddle material (shimmers)
     const fascia = new THREE.Mesh(new THREE.BoxGeometry(66, 0.7, 0.5), standRed);
     fascia.position.set(0, 9.2, 3.3);
     stand.add(fascia);
+    const bannerTexS = canvasTexture(512, 32, (g) => {
+      g.fillStyle = '#d81800'; g.fillRect(0, 0, 512, 32);
+      const txt = 'FUJI SPEEDWAY';
+      const tw = txt.length * 6 * 3 - 3;
+      pixelText(g, txt, Math.floor((512 - tw) / 2), 6, '#fcfcfc', 3);
+    });
+    const roofBanner = new THREE.Mesh(
+      new THREE.PlaneGeometry(40, 1.7),
+      new THREE.MeshBasicMaterial({ map: bannerTexS }));
+    roofBanner.position.set(0, 10.3, 3.35);
+    stand.add(roofBanner);
     for (const px of [-30, 30]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9, 0.4), standGray);
       post.position.set(px, 4.5, 3.1);
