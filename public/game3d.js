@@ -13,7 +13,12 @@
      slow it. LO/HI gears, top speed 315 km/h. Timer ticks at
      ~2x real time ("game seconds").
    ============================================================ */
-import * as THREE from './lib/three.module.js';
+import * as THREE from 'three';
+import { EffectComposer } from './lib/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './lib/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from './lib/jsm/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from './lib/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './lib/jsm/postprocessing/OutputPass.js';
 
 /* ---------------- canvases ---------------- */
 const HW = 256, HH = 224;              // HUD logical resolution
@@ -381,6 +386,31 @@ scene.add(sun.target);
   scene.environment = pmrem.fromScene(envScene, 0.05).texture;
   pmrem.dispose();
 }
+/* post-processing: bloom + vignette/saturation */
+const composer = new EffectComposer(renderer);
+composer.setSize(GLW, GLH);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(GLW, GLH), 0.45, 0.4, 2.6);
+composer.addPass(bloom);
+const gradePass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float g = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      c.rgb = mix(vec3(g), c.rgb, 1.08);                  // gentle saturation
+      float d = distance(vUv, vec2(0.5));
+      c.rgb *= 1.0 - smoothstep(0.42, 0.85, d) * 0.32;    // vignette
+      gl_FragColor = c;
+    }`
+});
+composer.addPass(gradePass);
+composer.addPass(new OutputPass());
 
 /* ground */
 {
@@ -431,8 +461,13 @@ function buildRoad() {
     const s = i / N_SAMP * TRACK_LEN;
     const v0 = s / 7, v1 = ((i + step) / N_SAMP * TRACK_LEN) / 7;
     const grp = Math.floor(s / 10) % 2;
-    // road
-    quad(P(i, -HALF_W), P(i, HALF_W), P(j, HALF_W), P(j, -HALF_W), C.road, 0, v0, v1);
+    // road, split into three strips so the racing line reads rubbered-in
+    const lo0 = Math.max(-2.6, Math.min(2.6, KAPPA[i % N_SAMP] * 300));
+    const lo1 = Math.max(-2.6, Math.min(2.6, KAPPA[(i + step) % N_SAMP] * 300));
+    const RUB = 0x777777;                  // darker tint over the asphalt tex
+    quad(P(i, -HALF_W), P(i, lo0 - 1.3), P(j, lo1 - 1.3), P(j, -HALF_W), C.road, 0, v0, v1);
+    quad(P(i, lo0 - 1.3), P(i, lo0 + 1.3), P(j, lo1 + 1.3), P(j, lo0 - 1.3), RUB, 0, v0, v1);
+    quad(P(i, lo0 + 1.3), P(i, HALF_W), P(j, HALF_W), P(j, lo1 + 1.3), C.road, 0, v0, v1);
     // rumble strips, outer edge raised like a real curb
     const rc = grp ? C.rumbleR : C.rumbleW;
     quad(P(i, -HALF_W - RUM), P(i, -HALF_W), P(j, -HALF_W), P(j, -HALF_W - RUM),
@@ -524,7 +559,7 @@ buildRoad();
   scene.add(dome);
   const sunDisc = new THREE.Mesh(
     new THREE.CircleGeometry(120, 24),
-    new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false }));
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.8, 3.9), fog: false }));
   sunDisc.position.copy(SUN_DIR).multiplyScalar(2700);
   sunDisc.lookAt(0, 0, 0);
   scene.add(sunDisc);
@@ -621,6 +656,7 @@ function makeSignMesh(tex, wM, hM, poleH) {
 /* hazards: signs (deadly), puddles (slippery) — placed from the curvature map */
 const hazards = [];   // {s, x, kind: 'sign'|'puddle'}
 const finishFlags = [];   // start-line flag groups, waggled on the final lap
+const curveZones = [];    // {s, dir} per corner, filled by the scenery scan
 const startLights = [];   // gantry light materials, synced with the countdown
 let puddleMat = null;     // shared puddle material (shimmers)
 {
@@ -643,6 +679,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
     if (prev && wrapS(z.s - prev.s) < 60) continue;
     merged.push(z);
   }
+  curveZones.push(...merged);
   // arrow boards ~70/100 m before each curve, on the outside of the turn
   for (const z of merged) {
     const side = z.dir > 0 ? -(HALF_W + 3.2) : (HALF_W + 3.2);
@@ -686,7 +723,8 @@ let puddleMat = null;     // shared puddle material (shimmers)
     hazards.push({ s, x: side, kind: 'sign' });
   });
   // puddles on straights
-  puddleMat = new THREE.MeshBasicMaterial({ color: 0x0058f8 });
+  puddleMat = new THREE.MeshStandardMaterial({
+    color: 0x35506a, metalness: 1.0, roughness: 0.08 });
   const pudMat = puddleMat;
   const pudSpots = [[spots[1] + 45 || 150, 2.2], [spots[3] + 50 || 600, -2.0], [spots[6] + 40 || 1500, 1.4]];
   for (const [s, x] of pudSpots) {
@@ -830,6 +868,85 @@ let puddleMat = null;     // shared puddle material (shimmers)
     posAt(s, side, tree.position);
     scene.add(tree);
   }
+
+  // armco barriers: grid straight both sides + the hairpin outside
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.45, metalness: 0.4 });
+  const postMat2 = new THREE.MeshLambertMaterial({ color: 0x8a8a8a });
+  function railRun(s0, s1, off) {
+    for (let s = s0; s < s1; s += 8) {
+      const seg = new THREE.Group();
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(8.3, 0.35, 0.12), railMat);
+      rail.position.y = 0.62;
+      rail.castShadow = true;
+      seg.add(rail);
+      for (const px of [-3, 3]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.62, 0.12), postMat2);
+        post.position.set(px, 0.31, 0);
+        seg.add(post);
+      }
+      posAt(wrapS(s + 4), off, seg.position);
+      seg.rotation.y = headingAt(wrapS(s + 4));
+      scene.add(seg);
+    }
+  }
+  railRun(TRACK_LEN - 48, TRACK_LEN, HALF_W + 9.4);
+  railRun(TRACK_LEN - 48, TRACK_LEN, -(HALF_W + 9.4));
+  railRun(0, 34, HALF_W + 9.4);
+  railRun(0, 34, -(HALF_W + 9.4));
+  // hairpin: rails around the outside of the tightest corner
+  let hairS = 0, hairK = 0;
+  for (let s = 0; s < TRACK_LEN; s += 2)
+    if (Math.abs(kappaAt(s)) > hairK) { hairK = Math.abs(kappaAt(s)); hairS = s; }
+  const hairOut = kappaAt(hairS) > 0 ? -1 : 1;   // outside of the turn
+  for (let s = hairS - 60; s < hairS + 70; s += 8) {
+    const seg = new THREE.Group();
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.35, 0.12), railMat);
+    rail.position.y = 0.62;
+    rail.castShadow = true;
+    seg.add(rail);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.62, 0.12), postMat2);
+    post.position.set(0, 0.31, 0);
+    seg.add(post);
+    posAt(wrapS(s + 4), hairOut * (HALF_W + 4.6), seg.position);
+    seg.rotation.y = headingAt(wrapS(s + 4));
+    scene.add(seg);
+  }
+  // tire stacks at the outside of every corner
+  const tireMat2 = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.92 });
+  const tireTop = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.7 });
+  for (const z of curveZones) {
+    const out = z.dir > 0 ? -1 : 1;
+    for (let k = 0; k < 3; k++) {
+      const stack = new THREE.Group();
+      for (let l = 0; l < 3; l++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.26, 8, 14),
+          l === 2 && k === 1 ? tireTop : tireMat2);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 0.26 + l * 0.52;
+        ring.castShadow = true;
+        stack.add(ring);
+      }
+      const ss = wrapS(z.s + 18 + k * 8);
+      posAt(ss, out * (HALF_W + 3.4 + (k % 2) * 0.9), stack.position);
+      scene.add(stack);
+      if (k === 1) hazards.push({ s: ss, x: out * (HALF_W + 3.8), kind: 'sign' });
+    }
+  }
+  // brake marker boards on the hairpin approach
+  for (const [dist, label] of [[140, '150'], [90, '100'], [40, '50']]) {
+    const tex = canvasTexture(64, 48, (g) => {
+      g.fillStyle = '#fcfcfc'; g.fillRect(0, 0, 64, 48);
+      g.fillStyle = '#d81800'; g.fillRect(0, 0, 64, 10);
+      const tw = label.length * 6 * 2 - 2;
+      pixelText(g, label, Math.floor((64 - tw) / 2), 18, '#181818', 2);
+    });
+    const m = makeSignMesh(tex, 2.4, 1.8, 0.7);
+    const ms = wrapS(hairS - 55 - dist);
+    posAt(ms, hairOut * (HALF_W + 2.6), m.position);
+    m.rotation.y = headingAt(ms) + Math.PI;
+    scene.add(m);
+    hazards.push({ s: ms, x: hairOut * (HALF_W + 2.6), kind: 'sign' });
+  }
 }
 
 /* ---------------- cars ---------------- */
@@ -864,6 +981,33 @@ function buildF1(body, accent) {
   add(new THREE.BoxGeometry(0.14, 0.55, 0.75), darkMat, -1.12, 1.0, -1.65); // endplates
   add(new THREE.BoxGeometry(0.14, 0.55, 0.75), darkMat, 1.12, 1.0, -1.65);
   add(new THREE.BoxGeometry(0.16, 0.42, 0.16), darkMat, 0, 0.95, -1.65);   // wing pylon
+  // suspension arms, cockpit detail, exhausts, brake light
+  for (const [wx, wz] of [[-1.02, 1.65], [1.02, 1.65], [-1.18, -1.25], [1.18, -1.25]]) {
+    for (const dz of [-0.2, 0.2]) {
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, Math.abs(wx) - 0.45, 6), darkMat);
+      arm.rotation.z = Math.PI / 2;
+      arm.position.set(wx / 2, wz > 0 ? 0.38 : 0.5, wz + dz);
+      grp.add(arm);
+    }
+  }
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 6, 12), darkMat);
+  sw.position.set(0, 0.9, 0.8);
+  sw.rotation.x = -1.05;
+  grp.add(sw);                                                              // steering wheel
+  add(new THREE.BoxGeometry(0.6, 0.28, 0.42), darkMat, 0, 0.8, 0.1);        // driver shoulders
+  for (const ex of [-0.3, 0.3]) {
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.095, 0.5, 8), darkMat);
+    pipe.rotation.x = Math.PI / 2;
+    pipe.position.set(ex, 0.52, -1.9);
+    grp.add(pipe);
+  }
+  const brakeMat = new THREE.MeshBasicMaterial({ color: 0x4a0400 });
+  const brake = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.1), brakeMat);
+  brake.position.set(0, 1.28, -2.05);
+  grp.add(brake);
+  grp.userData.brakeMat = brakeMat;
+
   // wheels: [x, z, radius, width] — real cylinders now; outer group
   // steers (yaw), inner group spins around the axle
   grp.userData.wheels = [];
@@ -935,6 +1079,24 @@ for (let i = 0; i < SMOKE_N; i++) {
   scene.add(m);
   smokes.push({ m, life: 0, vx: 0, vy: 0, vz: 0 });
 }
+// permanent rubber arcs baked through every corner
+for (const z of curveZones) {
+  for (let i = 0; i < 9; i++) {
+    const s = wrapS(z.s + 6 + i * 5);
+    const drift = (i / 9) * 1.8 - 0.4;         // line drifts outward
+    const out = z.dir > 0 ? 1 : -1;            // toward the inside first
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 3.6),
+      new THREE.MeshBasicMaterial({ map: skidTex, transparent: true, opacity: 0.22, depthWrite: false }));
+    m.rotation.order = 'YXZ';
+    posAt(s, out * (1.2 - drift) + ((i * 7) % 3 - 1) * 0.5, m.position);
+    m.position.y = 0.035;
+    m.rotation.y = headingAt(s) + ((i % 3) - 1) * 0.06;
+    m.rotation.x = -Math.PI / 2;
+    scene.add(m);
+  }
+}
+
 const _fx = new THREE.Vector3();
 function laySkid(xOff) {
   const s = skids[skidIdx++ % SKID_N];
@@ -980,6 +1142,16 @@ const CAR_COLORS = [
 const playerMesh = buildF1(0xd81800, 0x0058f8);
 scene.add(playerMesh);
 playerMesh.visible = false;
+// exhaust flames flash briefly on gear shifts
+const flames = [-0.3, 0.3].map(x => {
+  const f = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: puffTex, color: 0xff8a20, transparent: true, opacity: 0.95, depthWrite: false }));
+  f.scale.setScalar(0.55);
+  f.position.set(x, 0.52, -2.35);
+  f.visible = false;
+  playerMesh.add(f);
+  return f;
+});
 
 /* explosion: fireball + white flash + smoke column + bouncing debris */
 const boom = { group: new THREE.Group(), parts: [], t: 0 };
@@ -1372,6 +1544,7 @@ function updateDriving(dt, racing) {
     if (Math.abs(k) > 0.02 && sp > 0.7 && (frame & 5) === 0) AudioFX.skid();
     // skid marks + tire smoke near the grip limit or under hard braking
     const braking = key('arrowdown') || key('s') || key(' ');
+    G.braking = braking && G.speed > 2;
     const gripLoad = Math.abs(kappaAt(G.pos)) * G.speed * G.speed * 0.1;
     if (G.speed > 26 && (braking || gripLoad > 8.5) && (frame & 1)) {
       laySkid(G.playerX - 1.15);
@@ -1651,17 +1824,17 @@ function updateView() {
   if (G.state === 'lightsQ' || G.state === 'lightsR') {
     const step = Math.floor(G.stateT / 0.8);
     const green = G.stateT > 2.15;
-    startLights.forEach((m, i) =>
-      m.color.setHex(green ? 0x00d800 : step >= i ? 0xf83800 : 0x3a0000));
+    startLights.forEach((m, i) => green ? m.color.setRGB(0.6, 9, 0.6)
+      : step >= i ? m.color.setRGB(9, 0.5, 0.35) : m.color.setHex(0x3a0000));
   } else if ((G.state === 'qualify' || G.state === 'race') && G.stateT < 1.6) {
-    startLights.forEach(m => m.color.setHex(0x00d800));
+    startLights.forEach(m => m.color.setRGB(0.6, 9, 0.6));
   } else {
     startLights.forEach(m => m.color.setHex(0x3a0000));
   }
 
   // puddles shimmer
   if (puddleMat && (frame & 3) === 0)
-    puddleMat.color.setHex(Math.sin(frame * 0.09) > 0 ? 0x0058f8 : 0x2280f8);
+    puddleMat.color.setHex(Math.sin(frame * 0.09) > 0 ? 0x35506a : 0x4a6a8a);
 
   // player car
   playerMesh.visible = driving && G.crashed <= 0 &&
@@ -1674,6 +1847,13 @@ function updateView() {
     for (const w of playerMesh.userData.wheels) {
       w.m.rotation.x -= (G.speed / w.r) * 0.0167;
       if (w.front) w.yaw.rotation.y = -G.steer * 0.3;
+    }
+    if (G.braking) playerMesh.userData.brakeMat.color.setRGB(9, 0.5, 0.3);
+    else playerMesh.userData.brakeMat.color.setHex(0x4a0400);
+    const flameOn = G.shiftCut > 0.04 && G.speed > 5 && G.crashed <= 0;
+    for (const f of flames) {
+      f.visible = flameOn;
+      if (flameOn) f.scale.setScalar(0.4 + (frame % 3) * 0.14);
     }
   }
 
@@ -1733,7 +1913,7 @@ function updateView() {
   sun.position.copy(camera.position).addScaledVector(SUN_DIR, 220);
   sun.target.position.copy(camera.position);
   sun.target.updateMatrixWorld();
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 /* ---------------- HUD (2D overlay, arcade layout) ---------------- */
