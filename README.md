@@ -1,15 +1,10 @@
 # Pole Position
 
-A browser remake of the 1982 Namco/Atari arcade racer, built from scratch with
-no external assets — every sprite, texture, model, and sound is generated in
-code. Ships in two flavors:
-
-- **`/` — Pole Position 3D**: true 3D (three.js, vendored locally) with a chase
-  camera, a road ribbon built from a closed spline of the stylized Fuji
-  Speedway layout, low-poly F1 cars, particle effects, and the classic arcade
-  HUD as a 2D overlay.
-- **`/classic` — Classic 2D**: the authentic pseudo-3D sprite-scaling look of
-  the original arcade game at 256×224, procedural pixel art and all.
+A browser remake of the 1982 Namco/Atari arcade racer, built from scratch
+with no external assets — every texture, model, and sound is generated in
+code. True 3D (three.js, vendored locally) with a chase camera, a road
+ribbon built from a closed spline, low-poly F1 cars, particle effects, and
+the classic arcade HUD as a 2D overlay.
 
 ## The rules (faithful to the arcade)
 
@@ -38,7 +33,7 @@ code. Ships in two flavors:
 | Z or Shift | shift gear (LO/HI) |
 | Enter | start / quick restart |
 | P or Esc | pause |
-| R | watch a replay of your last run (3D version) |
+| R | watch a replay of your last run |
 | O | options (track, laps, game time, extended time — the arcade dip switches) |
 | M | mute |
 
@@ -56,10 +51,12 @@ best-lap tracking, voice announcements, checkered flags on the final lap,
 and an options menu mirroring the original operator dip-switch ranges.
 Progress persists in `localStorage`.
 
-The 3D version adds a second circuit — **Seaside Run**, an oceanfront course
-with a fast opening loop and a tight chicane — selectable from the options
-menu, plus a live minimap during play and a TV-style race replay (press R
-after a run) filmed from trackside cameras.
+Two circuits, selectable from the options menu: the stylized **Fuji
+Speedway**, and **Seaside Run** — a palm-lined coast road with a fast
+opening sweeper, a climbing carousel, a hairpin looping a lighthouse
+headland, beach esses past the pier, and a flat-out cap back onto the
+boulevard. Plus a live minimap during play and a TV-style race replay
+(press R after a run) filmed from trackside cameras.
 
 ## Running
 

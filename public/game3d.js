@@ -308,12 +308,16 @@ const TRACKS = {
   seaside: {
     name: 'SEASIDE RUN', sea: true,
     cp: [
-      [0, -90], [0, 140], [0, 255], [0, 330],          // start straight, graduated
-      ...arcPts(-110, 380, 110, 0, 180, 6),            // top horseshoe (flat-out right)
-      [-220, 260], [-220, 150],                        // back stretch
-      [-224, 70], [-272, 15], [-272, -75],             // braking chicane (~34m)
-      ...arcPts(-135, -226, 135, 180, 360, 6),         // bottom cap
-      [0, -158]                                        // collinear grid anchor
+      [0, -90], [0, 10], [0, 95], [0, 140],             // grid straight (palm boulevard)
+      ...arcPts(-95, 175, 95, 0, 90, 6),                // T1 flat-out sweeper to the coast
+      [-130, 270], [-158, 270],                         // graduated west link
+      ...arcPts(-180, 330, 60, 270, 160, 6),            // climbing carousel (~41m)
+      [-230, 368],                                      // inflection breather
+      ...arcPts(-263, 400.6, 42, -20, 180, 10),         // LIGHTHOUSE HAIRPIN (~30m)
+      [-305.5, 384], [-306, 367], [-305, 330], [-305, 190], // coast road along the beach
+      [-292, 105], [-256, 40], [-249, -60], [-244, -150],   // beach esses drifting inland
+      ...arcPts(-122, -226, 122, 180, 360, 6),          // fast final cap onto the grid
+      [0, -158]                                         // collinear grid anchor
     ]
   }
 };
@@ -324,11 +328,12 @@ try {
 } catch (e) {}
 const CP_RAW = TRACKS[TRACK_ID].cp;
 
+let TRACK_SCALE = 1;   // CP_RAW units -> meters, for placing scenery by CP coords
 function buildTrackCurve() {
   const mk = (k) => new THREE.CatmullRomCurve3(
     CP_RAW.map(([x, z]) => new THREE.Vector3(x * k, 0, z * k)), true, 'catmullrom', 0.5);
-  const scale = LAP_TARGET / mk(1).getLength();
-  return mk(scale);
+  TRACK_SCALE = LAP_TARGET / mk(1).getLength();
+  return mk(TRACK_SCALE);
 }
 const trackCurve = buildTrackCurve();
 const TRACK_LEN = trackCurve.getLength();
@@ -570,19 +575,198 @@ buildRoad();
 
 /* scenery: Mt Fuji, mountain ring, clouds */
 if (TRACKS[TRACK_ID].sea) {
-  // ocean along the east side with a sandy shore
+  const S = TRACK_SCALE;
+  // ocean + sandy shore hugging the west side (the coast road runs along it)
   const sea = new THREE.Mesh(
     new THREE.PlaneGeometry(6000, 9000),
-    new THREE.MeshStandardMaterial({ color: 0x1a6fc4, roughness: 0.25, metalness: 0.55 }));
+    new THREE.MeshStandardMaterial({ color: 0x1a6fc4, roughness: 0.22, metalness: 0.55 }));
   sea.rotation.x = -Math.PI / 2;
-  sea.position.set(3220, -0.25, 0);
+  sea.position.set(-3475, -0.25, 0);
   scene.add(sea);
   const beach = new THREE.Mesh(
-    new THREE.PlaneGeometry(340, 9000),
+    new THREE.PlaneGeometry(160, 9000),
     new THREE.MeshStandardMaterial({ color: 0xe6d5a0, roughness: 1 }));
   beach.rotation.x = -Math.PI / 2;
-  beach.position.set(300, -0.32, 0);
+  beach.position.set(-400, -0.32, 0);
   scene.add(beach);
+  // foam lines where the surf meets the sand
+  for (const [w, off, op] of [[6, 0, 0.6], [4, 9, 0.38], [3, 19, 0.22]]) {
+    const foam = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, 9000),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: op }));
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(-478 - off, -0.18, 0);
+    scene.add(foam);
+  }
+
+  // palm trees: curved trunk + frond crown + coconuts
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8a6a42 });
+  const frondMats = [new THREE.MeshLambertMaterial({ color: 0x2c8a3e, side: THREE.DoubleSide }),
+    new THREE.MeshLambertMaterial({ color: 0x3da24d, side: THREE.DoubleSide })];
+  const cocoMat = new THREE.MeshLambertMaterial({ color: 0x5a4326 });
+  function buildPalm(seed) {
+    const g = new THREE.Group();
+    const h = 6.5 + (seed % 5) * 0.7, lean = 0.10 + (seed % 3) * 0.05;
+    let px = 0;
+    for (let i = 0; i < 5; i++) {
+      const seg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22 - i * 0.015, 0.26 - i * 0.015, h / 5, 6), trunkMat);
+      px += lean * (i / 4);
+      seg.position.set(px, h / 10 + i * h / 5, 0);
+      seg.castShadow = true;
+      g.add(seg);
+    }
+    for (let i = 0; i < 8; i++) {
+      const frond = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 0.6), frondMats[i % 2]);
+      frond.position.set(px, h + 0.15, 0);
+      frond.rotation.y = i / 8 * Math.PI * 2 + seed;
+      frond.rotation.z = -0.5;                     // droop
+      frond.translateX(1.5);                       // reach outward from the trunk
+      frond.castShadow = true;
+      g.add(frond);
+    }
+    for (let i = 0; i < 3; i++) {
+      const nut = new THREE.Mesh(new THREE.SphereGeometry(0.2, 6, 5), cocoMat);
+      nut.position.set(px + Math.cos(i * 2.1) * 0.35, h - 0.15, Math.sin(i * 2.1) * 0.35);
+      g.add(nut);
+    }
+    g.rotation.y = seed * 2.4;
+    return g;
+  }
+  // along the coast road (beach side full length; inland side only where
+  // the road still hugs the shore — further south the esses drift east)
+  let pi = 0;
+  for (let z = 400; z > -140; z -= 46) {
+    for (const x of [-283 * S, -330 * S]) {
+      if (x > -300 && z < 210) continue;
+      const p = buildPalm(pi++);
+      p.position.set(x + ((pi * 37) % 11) - 5, 0, z * S + ((pi * 53) % 17) - 8);
+      scene.add(p);
+    }
+  }
+  // palm boulevard down the grid straight (clear of the start-line armco)
+  for (let z = -40; z < 135; z += 44) {
+    for (const x of [-16.5, 16.5]) {
+      const p = buildPalm(pi++);
+      p.position.set(x, 0, z * S);
+      scene.add(p);
+    }
+  }
+
+  // lighthouse on the headland, inside the hairpin
+  {
+    const lh = new THREE.Group();
+    const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.6 });
+    const red = new THREE.MeshStandardMaterial({ color: 0xd81800, roughness: 0.6 });
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 12), white);
+    tower.position.y = 7.5;
+    tower.castShadow = true;
+    lh.add(tower);
+    for (const y of [4, 9]) {
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(3.06 - y * 0.052, 3.16 - y * 0.052, 2.2, 12), red);
+      band.position.y = y;
+      lh.add(band);
+    }
+    const gallery = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 0.5, 12), red);
+    gallery.position.y = 15.3;
+    lh.add(gallery);
+    const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(9, 7.5, 5) });
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 2.2, 10), lampMat);
+    lamp.position.y = 16.6;
+    lh.add(lamp);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.1, 10), red);
+    roof.position.y = 18.8;
+    lh.add(roof);
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x777d82, flatShading: true });
+    for (let i = 0; i < 6; i++) {
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.6 + (i % 3) * 0.9, 0), rockMat);
+      rock.position.set(Math.cos(i * 1.15) * (4.5 + (i % 2) * 2.5), 0.4,
+        Math.sin(i * 1.15) * (4.5 + (i % 2) * 2.5));
+      rock.castShadow = true;
+      lh.add(rock);
+    }
+    // on the headland point NW of the hairpin: framed dead-ahead through the
+    // carousel and the hairpin entry (at the circle center it would sit
+    // permanently abeam of the chase camera and never be seen)
+    lh.position.set(-352, 0, 448);
+    lh.scale.setScalar(1.35);
+    scene.add(lh);
+  }
+
+  // wooden pier reaching into the surf
+  {
+    const pier = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x9a7a50, roughness: 0.9 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(170, 0.5, 7), wood);
+    deck.position.set(-85, 1.8, 0);
+    deck.castShadow = true;
+    pier.add(deck);
+    for (let x = -160; x <= 0; x += 16) {
+      for (const z of [-2.6, 2.6]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 2.6, 6), wood);
+        post.position.set(x, 0.5, z);
+        pier.add(post);
+      }
+    }
+    const hut = new THREE.Mesh(new THREE.BoxGeometry(8, 4.4, 5.6),
+      new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.8 }));
+    hut.position.set(-158, 4, 0);
+    hut.castShadow = true;
+    pier.add(hut);
+    const hutRoof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 2.6, 4),
+      new THREE.MeshStandardMaterial({ color: 0xc44b28, roughness: 0.85 }));
+    hutRoof.position.set(-158, 7.5, 0);
+    hutRoof.rotation.y = Math.PI / 4;
+    pier.add(hutRoof);
+    pier.position.set(-390, 0, 60 * S);
+    scene.add(pier);
+  }
+
+  // beach umbrellas + towels
+  const brolly = [0xf83800, 0x0058f8, 0xf8b800, 0x00a800, 0xfc74b4];
+  for (let i = 0; i < 12; i++) {
+    const u = new THREE.Group();
+    const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.1, 1.0, 8),
+      new THREE.MeshLambertMaterial({ color: brolly[i % 5], side: THREE.DoubleSide }));
+    canopy.position.y = 2.1;
+    canopy.castShadow = true;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.2, 5),
+      new THREE.MeshLambertMaterial({ color: 0xe8e8e8 }));
+    pole.position.y = 1.1;
+    u.add(canopy, pole);
+    u.rotation.z = 0.12;
+    u.position.set(-355 - (i * 41 % 80), 0, ((i * 89) % 640) - 290);
+    scene.add(u);
+    const towel = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3),
+      new THREE.MeshLambertMaterial({ color: brolly[(i + 2) % 5] }));
+    towel.rotation.x = -Math.PI / 2;
+    towel.rotation.z = i * 0.9;
+    towel.position.set(u.position.x + 3, -0.25, u.position.z + 2);
+    scene.add(towel);
+  }
+
+  // sailboats out on the water
+  for (let i = 0; i < 5; i++) {
+    const boat = new THREE.Group();
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(5.4, 1.1, 1.8),
+      new THREE.MeshLambertMaterial({ color: i % 2 ? 0xfcfcfc : 0x0058f8 }));
+    hull.position.y = 0.5;
+    boat.add(hull);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 7, 5),
+      new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+    mast.position.y = 4;
+    boat.add(mast);
+    const sailGeo = new THREE.BufferGeometry();
+    sailGeo.setAttribute('position', new THREE.Float32BufferAttribute(
+      [0, 1.2, 0, 0, 7.2, 0, 2.6, 1.2, 0], 3));
+    sailGeo.computeVertexNormals();
+    const sail = new THREE.Mesh(sailGeo,
+      new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+    boat.add(sail);
+    boat.position.set(-560 - (i * 137) % 420, 0, ((i * 263) % 900) - 430);
+    boat.rotation.y = i * 1.7;
+    scene.add(boat);
+  }
 }
 {
   const fuji = new THREE.Group();
@@ -606,7 +790,7 @@ if (TRACKS[TRACK_ID].sea) {
       color: mtNear.clone().lerp(mtFar, (i % 3) / 2.4), flatShading: true });
     const m = new THREE.Mesh(new THREE.ConeGeometry(260 + (i % 4) * 90, 110 + (i % 3) * 60, 7), mtMat);
     m.position.set(Math.cos(a) * r - 300, (110 + (i % 3) * 60) / 2 - 4, Math.sin(a) * r + 300);
-    if (TRACKS[TRACK_ID].sea && m.position.x > -150) continue;   // ocean side stays open
+    if (TRACKS[TRACK_ID].sea && m.position.x < 150) continue;   // ocean side stays open
     scene.add(m);
   }
   // gradient sky dome + sun
@@ -909,7 +1093,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
     stand.add(fascia);
     const bannerTexS = canvasTexture(512, 32, (g) => {
       g.fillStyle = '#d81800'; g.fillRect(0, 0, 512, 32);
-      const txt = 'FUJI SPEEDWAY';
+      const txt = TRACKS[TRACK_ID].name;
       const tw = txt.length * 6 * 3 - 3;
       pixelText(g, txt, Math.floor((512 - tw) / 2), 6, '#fcfcfc', 3);
     });
@@ -2102,8 +2286,8 @@ function renderHUD() {
     drawText(G.lap + '/' + RACE_LAPS, 232, 11, C.hudCyan);
   else if (G.state === 'qualify')
     drawText('QUAL', 232, 11, C.hudCyan);
-  if (G.bestLap && inRace)
-    drawText('B ' + fmtLap(G.bestLap), 174, 11, C.hudWhite);
+  if (G.bestLap && inRace)   // bottom edge, left of the LO/HI gear indicator
+    drawText('B ' + fmtLap(G.bestLap), HW - 74, HH - 10, C.hudWhite);
   drawText('SCORE', 6, 11, C.hudYel);
   drawText(String(Math.floor(G.score / 10) * 10), 42, 11, C.hudWhite);
   const showTimer = ['qualify', 'race', 'lightsQ', 'lightsR', 'finish', 'timeUp'].includes(G.state);

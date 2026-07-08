@@ -1,4 +1,4 @@
-/* On-screen touch controls for Pole Position (both versions).
+/* On-screen touch controls for Pole Position.
    Shown only on coarse-pointer (touch) devices; feeds the game
    through window.__ppInput(key, isDown).
 
@@ -162,17 +162,16 @@
 
     /* tapping the game screen: sent as 'tap' with 256x224 logical coords —
        starts/restarts from menus, changes rows in the options screen */
-    for (const c of document.querySelectorAll('#gl, #game')) {
-      c.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        const r = c.getBoundingClientRect();
-        window.__ppInput('tap', true, {
-          x: (e.clientX - r.left) / r.width * 256,
-          y: (e.clientY - r.top) / r.height * 224
-        });
-        window.__ppInput('tap', false);
+    const glc = document.getElementById('gl');
+    glc.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const r = glc.getBoundingClientRect();
+      window.__ppInput('tap', true, {
+        x: (e.clientX - r.left) / r.width * 256,
+        y: (e.clientY - r.top) / r.height * 224
       });
-    }
+      window.__ppInput('tap', false);
+    });
   }
 
   // the 3D game is an ES module (deferred), so __ppInput may not exist yet
