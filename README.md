@@ -3,7 +3,7 @@
 A browser remake of the 1982 Namco/Atari arcade racer, built from scratch
 with no external assets — every texture, model, and sound is generated in
 code. True 3D (three.js, vendored locally) with a chase camera, a road
-ribbon built from a closed spline, low-poly F1 cars, particle effects, and
+ribbon built from a closed spline, detailed period-F1 cars, particle effects, and
 the classic arcade HUD as a 2D overlay.
 
 ## The rules (faithful to the arcade)
