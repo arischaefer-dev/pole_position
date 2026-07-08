@@ -45,7 +45,9 @@ code. Ships in two flavors:
 On phones and tablets, on-screen touch controls appear automatically:
 slide your thumb across the steering pad to switch direction without
 lifting, tap the screen to start, and turn on AUTO to hold the throttle
-for you (braking overrides it). Portrait and landscape both work.
+for you (braking overrides it). The OPT button opens the options menu —
+tap a row to change it (track, laps, times) and OPT again to save.
+Portrait and landscape both work.
 
 ## Extras
 

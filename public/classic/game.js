@@ -700,7 +700,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
 /* input hook for on-screen touch controls (touch.js) */
-window.__ppInput = (k, down) => {
+window.__ppInput = (k, down, pt) => {
   AudioFX.ensure();
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (k === 'gear') { if (down) toggleGear(); return; }
@@ -708,6 +708,32 @@ window.__ppInput = (k, down) => {
     if (down && ['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
       G.paused = !G.paused;
       if (G.paused) AudioFX.engine(false, 0);
+    }
+    return;
+  }
+  if (k === 'o') {
+    if (down) {
+      if (G.state === 'options') { applyDip(); setState('title'); }
+      else if (G.state === 'title' || G.state === 'scores') {
+        G.demo = false;
+        AudioFX.engine(false, 0);
+        G.optSel = 0;
+        setState('options');
+      }
+    }
+    return;
+  }
+  if (k === 'tap') {                     // screen tap, pt in 256x224 coords
+    if (down) {
+      if (G.state === 'options' && pt) {
+        if (pt.y >= 84 && pt.y < 142) {  // menu rows at y = 90 + i*16
+          G.optSel = Math.max(0, Math.min(DIP_ROWS.length - 1,
+            Math.round((pt.y - 90) / 16)));
+          optionsInput(pt.x < W / 2 ? 'arrowleft' : 'arrowright');
+        } else if (pt.y >= 142) { applyDip(); setState('title'); }
+      } else if (G.state === 'title' || G.state === 'scores') startGame();
+      else if (G.state === 'gameOver') leaveGameOver(true);
+      else if (G.state === 'initials') confirmInitial();
     }
     return;
   }
@@ -1352,7 +1378,8 @@ function renderStateOverlays() {
         drawText((sel ? '>' : ' ') + label, 48, y, sel ? C.hudYel : C.hudWhite);
         drawText(String(DIP[key]), 186, y, sel ? C.hudYel : C.hudCyan);
       });
-      drawTextC('ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
+      drawTextC(COARSE ? 'TAP ROW TO CHANGE - OPT OK'
+        : 'ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
       break;
     }
     case 'initials': {
@@ -1370,7 +1397,8 @@ function renderStateOverlays() {
         ctx.fillStyle = cur ? C.hudRed : '#555';
         ctx.fillRect(x0 + i * 20, 138, 11, 2);
       }
-      drawTextC('ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
+      drawTextC(COARSE ? 'STEER TO CHANGE - TAP OK'
+        : 'ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
       break;
     }
     case 'qualDone': {

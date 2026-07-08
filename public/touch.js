@@ -52,13 +52,16 @@
           width: 96px; height: 44px; font-size: 14px; color: #aaa; }
         #tc-auto.on { background: rgba(248,184,0,0.30);
           border-color: rgba(248,184,0,0.8); color: #ffd75e; }
-        /* start + pause live in a bar ABOVE the play area so nothing overlaps */
-        #tc-start { left: 50%; transform: translateX(-108%);
+        /* start + options + pause live in a bar ABOVE the play area */
+        #tc-start { left: calc(50% - 126px);
           top: calc(8px + env(safe-area-inset-top));
-          width: 92px; height: 38px; font-size: 15px; }
-        #tc-pause { left: 50%; transform: translateX(8%);
+          width: 86px; height: 38px; font-size: 15px; }
+        #tc-opt { left: calc(50% - 30px);
           top: calc(8px + env(safe-area-inset-top));
-          width: 92px; height: 38px; font-size: 15px; }
+          width: 60px; height: 38px; font-size: 14px; }
+        #tc-pause { left: calc(50% + 40px);
+          top: calc(8px + env(safe-area-inset-top));
+          width: 86px; height: 38px; font-size: 15px; }
         @media (orientation: landscape) {
           /* thumbs at the phone's edges: steering pad left, pedals right,
              start/pause in the top corners clear of the HUD */
@@ -72,9 +75,9 @@
             bottom: calc(16px + env(safe-area-inset-bottom)); }
           #tc-gear { right: calc(116px + env(safe-area-inset-right));
             bottom: calc(120px + env(safe-area-inset-bottom)); }
-          #tc-start { left: calc(8px + env(safe-area-inset-left));
-            transform: none; }
-          #tc-pause { left: auto; transform: none;
+          #tc-start { left: calc(8px + env(safe-area-inset-left)); }
+          #tc-opt { left: calc(102px + env(safe-area-inset-left)); }
+          #tc-pause { left: auto;
             right: calc(8px + env(safe-area-inset-right)); }
         }
       </style>
@@ -87,6 +90,7 @@
       <div class="tbtn" id="tc-gear">GEAR</div>
       <div class="tbtn" id="tc-auto">AUTO</div>
       <div class="tbtn" id="tc-start">START</div>
+      <div class="tbtn" id="tc-opt">OPT</div>
       <div class="tbtn" id="tc-pause">&#10074;&#10074; / &#9654;</div>`;
     document.body.appendChild(wrap);
     const el = (id) => document.getElementById(id);
@@ -144,6 +148,7 @@
     });
     bindHold('tc-gear', (down) => { if (down) window.__ppInput('gear', true); });
     bindHold('tc-start', (down) => window.__ppInput('enter', down));
+    bindHold('tc-opt', (down) => window.__ppInput('o', down));
     bindHold('tc-pause', (down) => window.__ppInput('pause', down));
     el('tc-auto').addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -155,12 +160,17 @@
     el('tc-auto').classList.toggle('on', cfg.auto);
     applyThrottle();
 
-    /* tapping the game screen = ENTER (start / restart; no-op mid-race) */
+    /* tapping the game screen: sent as 'tap' with 256x224 logical coords —
+       starts/restarts from menus, changes rows in the options screen */
     for (const c of document.querySelectorAll('#gl, #game')) {
       c.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        window.__ppInput('enter', true);
-        window.__ppInput('enter', false);
+        const r = c.getBoundingClientRect();
+        window.__ppInput('tap', true, {
+          x: (e.clientX - r.left) / r.width * 256,
+          y: (e.clientY - r.top) / r.height * 224
+        });
+        window.__ppInput('tap', false);
       });
     }
   }
