@@ -975,14 +975,21 @@ let puddleMat = null;     // shared puddle material (shimmers)
     hazards.push({ s, x: side, kind: 'sign' });
   });
   // puddles on straights
+  // metalness < 1 keeps a blue tint at grazing angles — a perfect mirror
+  // reflects the pale horizon from afar and camouflages into the road.
+  // polygonOffset beats the road's -2 (car shadow at -4 still wins).
   puddleMat = new THREE.MeshStandardMaterial({
-    color: 0x35506a, metalness: 1.0, roughness: 0.08 });
+    color: 0x35506a, metalness: 0.75, roughness: 0.12,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
   const pudMat = puddleMat;
   const pudSpots = [[spots[1] + 45 || 150, 2.2], [spots[3] + 50 || 600, -2.0], [spots[6] + 40 || 1500, 1.4]];
   for (const [s, x] of pudSpots) {
-    const p = new THREE.Mesh(new THREE.CircleGeometry(2.2, 12), pudMat);
+    const p = new THREE.Mesh(new THREE.CircleGeometry(2.0, 16), pudMat);
     p.rotation.x = -Math.PI / 2;
-    p.scale.y = 0.55;
+    // elongated ALONG the road (~10m streak): a flat decal only a couple of
+    // meters long is a 1-2px sliver from the chase camera at 60m+ and seems
+    // to pop into existence as you reach it
+    p.scale.y = 2.6;
     posAt(wrapS(s), x, p.position);
     p.position.y = 0.04;
     p.rotation.z = headingAt(wrapS(s));
@@ -1875,15 +1882,17 @@ function updateDriving(dt, racing) {
     // hazards
     for (const h of hazards) {
       const dz = (h.s - G.pos + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
-      if (dz < -3 || dz > 5) continue;
+      if (dz < -6 || dz > 6) continue;
       if (h.kind === 'puddle') {
-        if (Math.abs(G.playerX - h.x) < 2.4 && G.speed > MAX_SPEED * 0.3) {
+        // footprint matches the visual: ~10m streak, 4m wide
+        if (Math.abs(dz) < 5.4 && Math.abs(G.playerX - h.x) < 2.0 &&
+            G.speed > MAX_SPEED * 0.3) {
           G.speed *= (1 - 3 * dt);
           G.playerX += (G.playerX < h.x ? -1 : 1) * 4 * dt;
           AudioFX.skid();
         }
-      } else if (Math.abs(G.playerX - h.x) < 2.6 && G.speed > MAX_SPEED * 0.05 &&
-                 G.invuln <= 0) {
+      } else if (dz >= -3 && dz <= 5 && Math.abs(G.playerX - h.x) < 2.6 &&
+                 G.speed > MAX_SPEED * 0.05 && G.invuln <= 0) {
         doCrash();
       }
     }
