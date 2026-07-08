@@ -274,21 +274,43 @@ function arcPts(cx, cz, r, a0deg, a1deg, n) {
   }
   return out;
 }
-const CP_RAW = [
-  [0, -90], [0, 150], [0, 400], [0, 600],              // front straight
-  [-30, 700], [-130, 730], [-230, 690],                // T1 sharp right
-  [-330, 660], [-430, 680], [-530, 650],               // easy left kink
-  [-640, 600], [-700, 480], [-650, 360], [-540, 320],  // sweeping right horseshoe
-  [-430, 300], [-380, 302],                            // run back
-  ...arcPts(-330, 400, 90, 270, 360, 4),               // right lead-in quarter arc
-  [-238, 445],
-  ...arcPts(-168, 490, 66, 180, 0, 6),                 // LEFT HAIRPIN (min r ~24m)
-  [-104, 452], [-114, 412], [-135, 362],               // graduated exit
-  [-170, 230], [-195, 60], [-206, -80],                // descent to the cap
-  [-210, -150], [-210, -192],
-  ...arcPts(-105, -235, 105, 180, 360, 6),             // wide cap arc onto the straight
-  [0, -160]
-];   // [0,-235 arc end] -> [0,-160] -> [0,-90] -> [0,150] keeps the grid straight
+const TRACKS = {
+  fuji: {
+    name: 'FUJI SPEEDWAY', sea: false,
+    cp: [
+      [0, -90], [0, 150], [0, 400], [0, 600],              // front straight
+      [-30, 700], [-130, 730], [-230, 690],                // T1 sharp right
+      [-330, 660], [-430, 680], [-530, 650],               // easy left kink
+      [-640, 600], [-700, 480], [-650, 360], [-540, 320],  // sweeping right horseshoe
+      [-430, 300], [-380, 302],                            // run back
+      ...arcPts(-330, 400, 90, 270, 360, 4),               // right lead-in quarter arc
+      [-238, 445],
+      ...arcPts(-168, 490, 66, 180, 0, 6),                 // LEFT HAIRPIN (min r ~24m)
+      [-104, 452], [-114, 412], [-135, 362],               // graduated exit
+      [-170, 230], [-195, 60], [-206, -80],                // descent to the cap
+      [-210, -150], [-210, -192],
+      ...arcPts(-105, -235, 105, 180, 360, 6),             // wide cap arc onto the straight
+      [0, -160]
+    ]
+  },
+  seaside: {
+    name: 'SEASIDE RUN', sea: true,
+    cp: [
+      [0, -90], [0, 140], [0, 255], [0, 330],          // start straight, graduated
+      ...arcPts(-110, 380, 110, 0, 180, 6),            // top horseshoe (flat-out right)
+      [-220, 260], [-220, 150],                        // back stretch
+      [-224, 70], [-272, 15], [-272, -75],             // braking chicane (~34m)
+      ...arcPts(-135, -226, 135, 180, 360, 6),         // bottom cap
+      [0, -158]                                        // collinear grid anchor
+    ]
+  }
+};
+let TRACK_ID = 'fuji';
+try {
+  const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
+  if (TRACKS[d.track]) TRACK_ID = d.track;
+} catch (e) {}
+const CP_RAW = TRACKS[TRACK_ID].cp;
 
 function buildTrackCurve() {
   const mk = (k) => new THREE.CatmullRomCurve3(
@@ -338,6 +360,22 @@ function headingAt(s) {
   const i = Math.floor(idxAt(s)) % N_SAMP;
   return Math.atan2(TANG[i].x, TANG[i].z);
 }
+
+/* minimap: track outline scaled into a small HUD box (mirrored so
+   screen-right on the map matches steering right) */
+const MINI = { pts: [], w: 0, h: 0 };
+{
+  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const p of PTS) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+  }
+  const k = 46 / Math.max(maxX - minX, maxZ - minZ);
+  MINI.w = (maxX - minX) * k; MINI.h = (maxZ - minZ) * k;
+  MINI.map = (p) => [(maxX - p.x) * k, (maxZ - p.z) * k];
+  for (let i = 0; i < N_SAMP; i += 10) MINI.pts.push(MINI.map(PTS[i]));
+}
+const _mini = new THREE.Vector3();
 
 /* ---------------- three.js scene ---------------- */
 let renderer;
@@ -519,6 +557,21 @@ function buildRoad() {
 buildRoad();
 
 /* scenery: Mt Fuji, mountain ring, clouds */
+if (TRACKS[TRACK_ID].sea) {
+  // ocean along the east side with a sandy shore
+  const sea = new THREE.Mesh(
+    new THREE.PlaneGeometry(6000, 9000),
+    new THREE.MeshStandardMaterial({ color: 0x1a6fc4, roughness: 0.25, metalness: 0.55 }));
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(3220, -0.25, 0);
+  scene.add(sea);
+  const beach = new THREE.Mesh(
+    new THREE.PlaneGeometry(340, 9000),
+    new THREE.MeshStandardMaterial({ color: 0xe6d5a0, roughness: 1 }));
+  beach.rotation.x = -Math.PI / 2;
+  beach.position.set(300, -0.32, 0);
+  scene.add(beach);
+}
 {
   const fuji = new THREE.Group();
   const cone = new THREE.Mesh(
@@ -531,7 +584,7 @@ buildRoad();
   snow.position.y = 300 - 55 + 1;
   fuji.add(cone, snow);
   fuji.position.set(-700, 0, 1900);
-  scene.add(fuji);
+  if (!TRACKS[TRACK_ID].sea) scene.add(fuji);   // no volcano at the seaside
 
   const mtNear = new THREE.Color(0x2e7d3a), mtFar = new THREE.Color(0x7fa8bf);
   for (let i = 0; i < 12; i++) {
@@ -541,6 +594,7 @@ buildRoad();
       color: mtNear.clone().lerp(mtFar, (i % 3) / 2.4), flatShading: true });
     const m = new THREE.Mesh(new THREE.ConeGeometry(260 + (i % 4) * 90, 110 + (i % 3) * 60, 7), mtMat);
     m.position.set(Math.cos(a) * r - 300, (110 + (i % 3) * 60) / 2 - 4, Math.sin(a) * r + 300);
+    if (TRACKS[TRACK_ID].sea && m.position.x > -150) continue;   // ocean side stays open
     scene.add(m);
   }
   // gradient sky dome + sun
@@ -1260,8 +1314,8 @@ const QUAL_TABLE = [
 const GAME_TIME_RATE = 2;
 const QUAL_TIME = 90;
 /* operator "dip switch" settings, same ranges as the arcade cabinet */
-const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60] };
-const DIP = { laps: 3, time: 90, ext: 60 };
+const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60], track: ['fuji', 'seaside'] };
+const DIP = { laps: 3, time: 90, ext: 60, track: 'fuji' };
 try {
   const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
   for (const k of Object.keys(DIP))
@@ -1271,6 +1325,7 @@ let RACE_TIME = DIP.time, EXT_TIME = DIP.ext, RACE_LAPS = DIP.laps;
 function applyDip() {
   RACE_TIME = DIP.time; EXT_TIME = DIP.ext; RACE_LAPS = DIP.laps;
   try { localStorage.setItem('pp_dip', JSON.stringify(DIP)); } catch (e) {}
+  if (DIP.track !== TRACK_ID) location.reload();   // rebuild the world
 }
 const PTS_PER_LAP = 10000;
 const MAX_SPEED = 87.5;                 // m/s = 315 km/h
@@ -1345,7 +1400,7 @@ function makeCar(s, offset, maxPct, colorIdx, rival) {
   const mesh = buildF1(...CAR_COLORS[colorIdx % 4]);
   scene.add(mesh);
   return { s, offset, speed: 0, maxPct, mesh, ahead: true, rival,
-           phase: colorIdx * 1.7 + s * 0.01 };
+           ci: colorIdx % 4, phase: colorIdx * 1.7 + s * 0.01 };
 }
 function carAhead(c) {
   const d = (c.s - G.pos + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
@@ -1374,6 +1429,7 @@ function setupRaceGrid() {
   for (const c of G.cars) c.ahead = carAhead(c);
   G.speed = 0; G.gear = 0; G.crashed = 0; G.steer = 0;
   G.lapArmed = false;
+  REC.cars = G.cars.map(c => c.ci);
 }
 
 /* ---------------- input ---------------- */
@@ -1401,11 +1457,11 @@ function toggleGear() {
   }
 }
 const DIP_ROWS = [
-  ['LAPS', 'laps'], ['GAME TIME', 'time'], ['EXTENDED TIME', 'ext']
+  ['TRACK', 'track'], ['LAPS', 'laps'], ['GAME TIME', 'time'], ['EXTENDED TIME', 'ext']
 ];
 function optionsInput(k) {
-  if (k === 'arrowup') G.optSel = (G.optSel + 2) % 3;
-  else if (k === 'arrowdown') G.optSel = (G.optSel + 1) % 3;
+  if (k === 'arrowup') G.optSel = (G.optSel + 3) % 4;
+  else if (k === 'arrowdown') G.optSel = (G.optSel + 1) % 4;
   else if (k === 'arrowleft' || k === 'arrowright') {
     const key = DIP_ROWS[G.optSel][1];
     const list = DIP_CHOICES[key];
@@ -1450,6 +1506,14 @@ window.addEventListener('keydown', (e) => {
       if (G.paused) AudioFX.engine(false, 0);
     }
   }
+  if (k === 'r') {
+    if (G.state === 'replay') { exitReplay(); return; }
+    if (['title', 'scores', 'gameOver'].includes(G.state)) { enterReplay(); return; }
+  }
+  if (G.state === 'replay' && (e.key === 'Enter' || e.key === 'Escape')) {
+    exitReplay();
+    return;
+  }
   if (k === 'o' && (G.state === 'title' || G.state === 'scores')) {
     G.demo = false;
     AudioFX.engine(false, 0);
@@ -1464,6 +1528,9 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
 function startGame() {
+  clearReplayPool();
+  REC.data = [];
+  REC.cars = [];
   initGame();
   setState('prequal');
   flash('PREPARE TO QUALIFY', 2.4);
@@ -1480,6 +1547,46 @@ function leaveGameOver(quick) {
 
 /* ---------------- simulation ---------------- */
 let frame = 0;
+
+/* race recording for the replay (20 Hz position samples) */
+const REC = { data: [], cars: [] };
+const replayPool = [];
+const CAM_POSTS = [];
+for (let i = 0; i < 10; i++) {
+  const p = posAt(i * TRACK_LEN / 10, (i % 2 ? 1 : -1) * (HALF_W + 16));
+  p.y = 7.5;
+  CAM_POSTS.push(p);
+}
+function recordFrame() {
+  if (frame % 3) return;
+  const row = [G.pos, G.playerX, G.crashed > 0 ? 1 : 0];
+  for (const c of G.cars) row.push(c.s, c.offset);
+  REC.data.push(row);
+  if (REC.data.length > 4200) REC.data.shift();
+}
+function clearReplayPool() {
+  for (const m of replayPool) scene.remove(m);
+  replayPool.length = 0;
+}
+function enterReplay() {
+  if (REC.data.length < 40) return;
+  for (const c of G.cars) scene.remove(c.mesh);   // replay pool replaces live cars
+  G.cars = [];
+  clearReplayPool();
+  for (const ci of REC.cars) {
+    const m = buildF1(...CAR_COLORS[ci % 4]);
+    scene.add(m);
+    replayPool.push(m);
+  }
+  G.replayIdx = 0;
+  G.demo = false;
+  AudioFX.engine(false, 0);
+  setState('replay');
+}
+function exitReplay() {
+  clearReplayPool();
+  setState('title');
+}
 
 /* attract-mode autopilot (same controller proven in automated testing) */
 const demoKeys = {};
@@ -1678,6 +1785,11 @@ function update(dt) {
     case 'options':
       break;
 
+    case 'replay':
+      G.replayIdx += 0.34;                 // 20 Hz samples at 60 fps = realtime
+      if (G.replayIdx >= REC.data.length - 1) exitReplay();
+      break;
+
     case 'prequal':
       if (G.stateT > 2.6) {
         setState('lightsQ');
@@ -1703,6 +1815,7 @@ function update(dt) {
     case 'qualify': {
       G.timer -= dt * GAME_TIME_RATE;
       G.lapTime += dt * GAME_TIME_RATE;
+      recordFrame();
       const crossed = updateDriving(dt, false);
       if (crossed) {
         G.qualTime = G.lapTime;
@@ -1743,6 +1856,7 @@ function update(dt) {
     case 'race': {
       G.timer -= dt * GAME_TIME_RATE;
       G.lapTime += dt * GAME_TIME_RATE;
+      recordFrame();
       const crossed = updateDriving(dt, true);
       if (crossed) {
         if (!G.lapArmed) {
@@ -1885,6 +1999,33 @@ function updateView() {
     renderer.render(scene, camera);
     return;
   }
+  if (G.state === 'replay') {
+    const row = REC.data[Math.floor(G.replayIdx)] || REC.data[0];
+    posAt(row[0], row[1], playerMesh.position);
+    playerMesh.rotation.y = headingAt(row[0]);
+    playerMesh.visible = !row[2];
+    for (let i = 0; i < replayPool.length; i++) {
+      const s = row[3 + i * 2];
+      if (s === undefined) { replayPool[i].visible = false; continue; }
+      replayPool[i].visible = true;
+      posAt(s, row[4 + i * 2], replayPool[i].position);
+      replayPool[i].rotation.y = headingAt(s);
+    }
+    // nearest trackside camera follows the action
+    posAt(row[0], row[1], _mini);
+    let best = CAM_POSTS[0], bd = Infinity;
+    for (const post of CAM_POSTS) {
+      const d = post.distanceToSquared(_mini);
+      if (d < bd) { bd = d; best = post; }
+    }
+    camera.position.copy(best);
+    camera.lookAt(_mini.x, 1.2, _mini.z);
+    sun.position.copy(camera.position).addScaledVector(SUN_DIR, 220);
+    sun.target.position.copy(camera.position);
+    sun.target.updateMatrixWorld();
+    composer.render();
+    return;
+  }
   if (driving) {
     // chase camera with smoothed lateral follow
     viewX += (G.playerX - viewX) * 0.14;
@@ -1991,10 +2132,11 @@ function shade(y0, h) {
 function renderStateOverlays() {
   switch (G.state) {
     case 'title': {
-      shade(36, 56);
+      shade(36, 62);
       drawTextC('POLE', 44, C.hudRed, 3);
       drawTextC('POSITION', 68, C.hudRed, 3);
-      shade(102, 84);
+      drawTextC(TRACKS[TRACK_ID].name, 92, C.hudWhite);
+      shade(106, 80);
       drawTextC('TOP SCORE ' + topScore, 108, C.hudYel);
       if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
       if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 136, C.hudWhite);
@@ -2018,10 +2160,11 @@ function renderStateOverlays() {
       shade(52, 122);
       drawTextC('OPTIONS', 58, C.hudRed, 2);
       DIP_ROWS.forEach(([label, key], i) => {
-        const y = 90 + i * 16;
+        const y = 82 + i * 15;
         const sel = i === G.optSel;
-        drawText((sel ? '>' : ' ') + label, 48, y, sel ? C.hudYel : C.hudWhite);
-        drawText(String(DIP[key]), 186, y, sel ? C.hudYel : C.hudCyan);
+        drawText((sel ? '>' : ' ') + label, 40, y, sel ? C.hudYel : C.hudWhite);
+        const val = key === 'track' ? TRACKS[DIP[key]].name : String(DIP[key]);
+        drawText(val, 214 - textW(val), y, sel ? C.hudYel : C.hudCyan);
       });
       drawTextC('ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
       break;
@@ -2081,12 +2224,49 @@ function renderStateOverlays() {
       drawTextC('GAME OVER', 96, C.hudRed, 2);
       drawTextC('SCORE ' + Math.floor(G.score / 10) * 10, 124, C.hudWhite);
       if (Math.floor(G.score) >= topScore) drawTextC('NEW TOP SCORE!', 140, C.hudYel);
+      if (REC.data.length > 40) drawTextC('R REPLAY', 154, C.hudCyan);
       break;
     }
   }
 }
+function renderMinimap(row) {
+  const x0 = 8, y0 = HH - 14 - MINI.h;
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(x0 - 3, y0 - 3, MINI.w + 7, MINI.h + 7);
+  ctx.strokeStyle = '#b0b0b0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  MINI.pts.forEach(([mx, my], i) => i ? ctx.lineTo(x0 + mx, y0 + my) : ctx.moveTo(x0 + mx, y0 + my));
+  ctx.closePath();
+  ctx.stroke();
+  const [sx, sy] = MINI.pts[0];
+  ctx.fillStyle = '#fcfcfc';
+  ctx.fillRect(x0 + sx - 1, y0 + sy - 1, 3, 2);
+  const dot = (s, off, col, size) => {
+    posAt(s, off, _mini);
+    const [mx, my] = MINI.map(_mini);
+    ctx.fillStyle = col;
+    ctx.fillRect(x0 + mx - size / 2, y0 + my - size / 2, size, size);
+  };
+  if (row) {
+    for (let i = 3; i + 1 < row.length; i += 2) dot(row[i], row[i + 1], '#3cbcfc', 2);
+    dot(row[0], row[1], '#f83800', 3);
+  } else {
+    for (const c of G.cars) dot(c.s, c.offset, '#3cbcfc', 2);
+    dot(G.pos, G.playerX, '#f83800', 3);
+  }
+}
 function renderHud2D() {
   ctx.clearRect(0, 0, HW, HH);
+  if (G.state === 'replay') {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, HW, 12);
+    ctx.fillRect(0, HH - 12, HW, 12);
+    if (frame % 30 < 20) drawText('REPLAY', 8, 3, C.hudRed);
+    drawText('R EXIT', HW - 46, 3, C.hudWhite);
+    renderMinimap(REC.data[Math.floor(G.replayIdx)]);
+    return;
+  }
   // faint speed streaks at the edges when flat out
   const spd = G.speed / MAX_SPEED;
   if ((G.state === 'qualify' || G.state === 'race') && spd > 0.86 && G.crashed <= 0) {
@@ -2102,6 +2282,7 @@ function renderHud2D() {
     }
   }
   renderHUD();
+  if (['qualify', 'race', 'finish', 'timeUp'].includes(G.state)) renderMinimap();
   renderLights();
   renderBanner();
   renderStateOverlays();
@@ -2159,7 +2340,7 @@ window.__ppInput = (k, down) => {
 window.__pp = {
   get G() { return G; },
   keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED, scene, camera, renderer,
-  setState, setupRaceGrid, flash,
+  setState, setupRaceGrid, flash, REC,
   warpRace(pos) {
     initGame();
     G.gridPos = pos || 4; G.qualBonus = 1000; G.qualTime = 63.2;

@@ -38,7 +38,8 @@ code. Ships in two flavors:
 | Z or Shift | shift gear (LO/HI) |
 | Enter | start / quick restart |
 | P or Esc | pause |
-| O | options (laps, game time, extended time — the arcade dip switches) |
+| R | watch a replay of your last run (3D version) |
+| O | options (track, laps, game time, extended time — the arcade dip switches) |
 | M | mute |
 
 On phones and tablets, on-screen touch controls appear automatically.
@@ -49,6 +50,11 @@ Attract mode with a self-driving demo, high-score table with initials entry,
 best-lap tracking, voice announcements, checkered flags on the final lap,
 and an options menu mirroring the original operator dip-switch ranges.
 Progress persists in `localStorage`.
+
+The 3D version adds a second circuit — **Seaside Run**, an oceanfront course
+with a fast opening loop and a tight chicane — selectable from the options
+menu, plus a live minimap during play and a TV-style race replay (press R
+after a run) filmed from trackside cameras.
 
 ## Running
 
