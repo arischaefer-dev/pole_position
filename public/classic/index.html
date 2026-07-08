@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Pole Position (Classic 2D)</title>
 <meta name="description" content="Classic pseudo-3D sprite-scaling version of the browser Pole Position remake.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23fff'/%3E%3Cpath fill='%23000' d='M0 0h4v4H0zM8 0h4v4H8zM4 4h4v4H4zM12 4h4v4h-4zM0 8h4v4H0zM8 8h4v4H8zM4 12h4v4H4zM12 12h4v4h-4z'/%3E%3C/svg%3E">
@@ -12,12 +12,26 @@
     background: #101010; color: #ccc;
     font-family: monospace;
     overflow: hidden;
+    touch-action: manipulation;
   }
   #wrap {
     height: 100%;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 8px;
+  }
+  /* touch devices: no keyboard help, game anchored below the START bar
+     so the lower half of the screen is clean thumb space */
+  @media (pointer: coarse) {
+    #help { display: none; }
+    #wrap {
+      justify-content: flex-start;
+      padding-top: calc(54px + env(safe-area-inset-top));
+      box-sizing: border-box;
+    }
+  }
+  @media (pointer: coarse) and (orientation: landscape) {
+    #wrap { justify-content: center; padding-top: 0; }
   }
   canvas {
     image-rendering: pixelated;

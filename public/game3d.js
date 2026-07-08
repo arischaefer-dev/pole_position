@@ -27,8 +27,20 @@ const glCanvas = document.getElementById('gl');
 const hudCanvas = document.getElementById('hud');
 const ctx = hudCanvas.getContext('2d');
 
+const COARSE = window.matchMedia && matchMedia('(pointer: coarse)').matches;
 function fitCanvas() {
-  const availH = window.innerHeight - 40, availW = window.innerWidth - 8;
+  let availW, availH;
+  if (COARSE) {
+    // reserve room for the on-screen controls (touch.js): in portrait the
+    // START bar above and the pedal zone below, in landscape the side columns
+    if (window.innerWidth > window.innerHeight) {
+      availW = window.innerWidth - 360; availH = window.innerHeight - 16;
+    } else {
+      availW = window.innerWidth - 8; availH = window.innerHeight - 254;
+    }
+  } else {
+    availW = window.innerWidth - 8; availH = window.innerHeight - 40;
+  }
   const raw = Math.min(availW / HW, availH / HH);
   // integer scale for crisp pixels on big screens, fractional on small ones
   const s = raw >= 2 ? Math.floor(raw) : Math.max(0.75, raw);

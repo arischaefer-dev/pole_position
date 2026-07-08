@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Pole Position 3D</title>
 <meta name="description" content="Browser remake of the 1982 Namco/Atari arcade racer Pole Position — qualify in under 73 seconds, then race the Grand Prix. True-3D and classic pseudo-3D versions.">
 <meta property="og:title" content="Pole Position 3D">
@@ -14,12 +14,26 @@
     background: #101010; color: #ccc;
     font-family: monospace;
     overflow: hidden;
+    touch-action: manipulation;
   }
   #wrap {
     height: 100%;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 8px;
+  }
+  /* touch devices: no keyboard help, game anchored below the START bar
+     so the lower half of the screen is clean thumb space */
+  @media (pointer: coarse) {
+    #help { display: none; }
+    #wrap {
+      justify-content: flex-start;
+      padding-top: calc(54px + env(safe-area-inset-top));
+      box-sizing: border-box;
+    }
+  }
+  @media (pointer: coarse) and (orientation: landscape) {
+    #wrap { justify-content: center; padding-top: 0; }
   }
   #stack { position: relative; }
   #stack canvas { display: block; }

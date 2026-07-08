@@ -42,7 +42,10 @@ code. Ships in two flavors:
 | O | options (track, laps, game time, extended time — the arcade dip switches) |
 | M | mute |
 
-On phones and tablets, on-screen touch controls appear automatically.
+On phones and tablets, on-screen touch controls appear automatically:
+slide your thumb across the steering pad to switch direction without
+lifting, tap the screen to start, and turn on AUTO to hold the throttle
+for you (braking overrides it). Portrait and landscape both work.
 
 ## Extras
 
