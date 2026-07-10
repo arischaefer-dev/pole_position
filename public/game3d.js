@@ -1183,77 +1183,152 @@ if (THEME === 'peg') {
     scene.add(er);
   }
 
-  // Canadian Museum for Human Rights: limestone roots, glass cloud, spire
+  // Canadian Museum for Human Rights — per photo reference: a mountain of
+  // angular Tyndall-limestone slabs at the back, a swooping banded glass
+  // "cloud" wrapping the track-facing side, and the Tower of Hope as an
+  // angular glass spike topped by an open steel lattice mast
   {
     const cmhr = new THREE.Group();
-    const stone = new THREE.MeshStandardMaterial({ color: 0xcdbfa4, roughness: 0.85 });
+    const stone = new THREE.MeshLambertMaterial({ color: 0xd6c9a8, flatShading: true });
+    const stoneDk = new THREE.MeshLambertMaterial({ color: 0xc2b490, flatShading: true });
     const glass = new THREE.MeshStandardMaterial({
-      color: 0xaed4e8, roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.75 });
-    for (let i = 0; i < 4; i++) {                       // the stone roots
-      const root = new THREE.Mesh(new THREE.BoxGeometry(7 + i * 2, 6 + i * 2.4, 8), stone);
-      root.position.set(-8 + i * 5.5, (6 + i * 2.4) / 2, (i % 2 ? 4 : -3));
-      root.rotation.y = i * 0.5;
-      root.castShadow = true;
-      cmhr.add(root);
+      color: 0x9fb8c8, roughness: 0.15, metalness: 0.6,
+      transparent: true, opacity: 0.85, flatShading: true });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x8a9298, roughness: 0.4, metalness: 0.7 });
+    // limestone mountain: stacked faceted prisms, tallest at the back
+    const slabs = [[16, 10, 18, 5, -4, 0], [21, 9, 26, 6, 4, 0.4],
+                   [26, 7, 20, 5, -7, 0.9], [12, 6, 13, 6, 10, 1.6], [30, 5, 12, 5, -13, 2.2]];
+    for (let i = 0; i < slabs.length; i++) {
+      const [x, r, h, sides, dz2, rot] = slabs[i];
+      const slab = new THREE.Mesh(
+        new THREE.CylinderGeometry(r * 0.72, r, h, sides), i % 2 ? stone : stoneDk);
+      slab.position.set(x - 4, h / 2, 3 + dz2 * 0.35);
+      slab.rotation.y = rot;
+      slab.castShadow = true;
+      cmhr.add(slab);
     }
-    const cloud = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 9), glass);
-    cloud.position.set(2, 12, 0);
-    cloud.scale.set(1.25, 0.95, 0.85);
-    cloud.castShadow = true;
-    cmhr.add(cloud);
-    const cloud2 = new THREE.Mesh(new THREE.SphereGeometry(8, 12, 9), glass);
-    cloud2.position.set(-7, 9, 2);
-    cloud2.scale.set(1.1, 0.8, 0.9);
-    cmhr.add(cloud2);
-    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.4, 34, 8), glass);
-    spire.position.set(6, 24, 0);
-    spire.castShadow = true;
-    cmhr.add(spire);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.7, 6, 5),
+    // glass cloud: three tilted, staggered shell bands draped beside the stone
+    for (let b = 0; b < 3; b++) {
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(9.5 - b * 1.6, 12, 8), glass);
+      shell.position.set(-6 - b * 3.2, 8 + b * 3.4, -4 - b * 0.8);
+      shell.scale.set(1.35, 0.78, 0.7);
+      shell.rotation.z = 0.28 + b * 0.12;               // the swoop
+      shell.rotation.y = -0.25;
+      shell.castShadow = true;
+      cmhr.add(shell);
+    }
+    // Tower of Hope: angular glass spike + open lattice mast above
+    const spike = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 2.6, 16, 4), glass);
+    spike.position.set(3, 26, -1);
+    spike.rotation.y = Math.PI / 4;
+    spike.castShadow = true;
+    cmhr.add(spike);
+    for (const [mx, mz] of [[-0.5, 0], [0.5, 0.3], [0, -0.5]]) {   // lattice legs
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 12, 4), steel);
+      leg.position.set(3 + mx, 39, -1 + mz);
+      leg.rotation.z = mx * 0.06;
+      cmhr.add(leg);
+    }
+    const mastTip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.09, 5, 4), steel);
+    mastTip.position.set(3, 47, -1);
+    cmhr.add(mastTip);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.55, 6, 5),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 3.2, 3.4) }));
-    tip.position.set(6, 41.4, 0);
+    tip.position.set(3, 49.2, -1);
     cmhr.add(tip);
     cmhr.position.set(-135 * S, 0, -310 * S);           // dead ahead off the river bend
     scene.add(cmhr);
   }
 
-  // Manitoba Legislature with the gilded Golden Boy, beside the grid straight
+  // Manitoba Legislature — per photo reference: long limestone wings with
+  // window rows and end pavilions, a six-column portico under a triangular
+  // pediment, a colonnaded drum, and the NEAR-BLACK dome carrying the boy
   {
     const leg = new THREE.Group();
     const stone = new THREE.MeshStandardMaterial({ color: 0xd8ccb2, roughness: 0.8 });
-    const base = new THREE.Mesh(new THREE.BoxGeometry(30, 8, 15), stone);
-    base.position.y = 4;
+    const stoneDk = new THREE.MeshStandardMaterial({ color: 0xc4b696, roughness: 0.85 });
+    const winMat2 = new THREE.MeshLambertMaterial({ color: 0x2c3440 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(46, 9, 13), stone);   // long wings
+    base.position.y = 4.5;
     base.castShadow = true;
     leg.add(base);
-    for (let c = 0; c < 6; c++) {                       // portico colonnade
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 7, 8), stone);
-      col.position.set(-7.5 + c * 3, 3.5, 7.9);
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(46.6, 2.2, 13.6), stoneDk);
+    plinth.position.y = 1.1;                            // rusticated ground band
+    leg.add(plinth);
+    for (const px of [-20.5, 20.5]) {                   // end pavilions
+      const pav = new THREE.Mesh(new THREE.BoxGeometry(6.5, 10, 14), stone);
+      pav.position.set(px, 5, 0);
+      pav.castShadow = true;
+      leg.add(pav);
+    }
+    for (let w = 0; w < 9; w++) {                       // two window rows per side
+      for (const wy of [3.4, 6.6]) {
+        for (const wz of [6.6, -6.6]) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.0, 0.15), winMat2);
+          win.position.set(-14 + w * 3.5, wy, wz);
+          leg.add(win);
+        }
+      }
+    }
+    const cornice = new THREE.Mesh(new THREE.BoxGeometry(46.8, 0.7, 13.8), stoneDk);
+    cornice.position.y = 9.3;                           // roofline balustrade band
+    leg.add(cornice);
+    // portico: projecting porch, 6 columns, triangular pediment
+    const porch = new THREE.Mesh(new THREE.BoxGeometry(13, 9, 3), stone);
+    porch.position.set(0, 4.5, 7);
+    porch.castShadow = true;
+    leg.add(porch);
+    for (let c = 0; c < 6; c++) {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 7.6, 8), stone);
+      col.position.set(-5.5 + c * 2.2, 3.8, 8.9);
       leg.add(col);
     }
-    const ped = new THREE.Mesh(new THREE.BoxGeometry(9, 3.2, 9), stone);
-    ped.position.y = 9.6;
-    leg.add(ped);
-    const drum = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.6, 4.5, 12), stone);
-    drum.position.y = 13.4;
+    const pedGeo = new THREE.CylinderGeometry(7.4, 7.4, 2.6, 3);
+    pedGeo.rotateX(Math.PI / 2);                        // prism axis -> depth
+    pedGeo.rotateZ(Math.PI);                            // triangle point -> up
+    pedGeo.scale(1, 0.42, 1);                           // flatten to pediment pitch
+    const pediment = new THREE.Mesh(pedGeo, stoneDk);
+    pediment.position.set(0, 10.4, 8.2);
+    pediment.castShadow = true;
+    leg.add(pediment);
+    const steps = new THREE.Mesh(new THREE.BoxGeometry(14, 1.4, 4.5), stoneDk);
+    steps.position.set(0, 0.7, 11);
+    leg.add(steps);
+    // tower: square stage, colonnaded drum, dark ribbed dome, lantern
+    const stage = new THREE.Mesh(new THREE.BoxGeometry(8.5, 4.5, 8.5), stone);
+    stage.position.y = 11.6;
+    stage.castShadow = true;
+    leg.add(stage);
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.9, 4.6, 12), stone);
+    drum.position.y = 16.2;
     leg.add(drum);
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(4.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0x3f7a56, roughness: 0.5, metalness: 0.4 }));
-    dome.position.y = 15.6;
+    for (let c = 0; c < 10; c++) {                      // drum colonnade ring
+      const a = c / 10 * Math.PI * 2;
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.4, 6), stone);
+      col.position.set(Math.cos(a) * 4.3, 16.2, Math.sin(a) * 4.3);
+      leg.add(col);
+    }
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(4.0, 14, 9, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x23282e, roughness: 0.45, metalness: 0.5 }));
+    dome.position.y = 18.5;
     dome.castShadow = true;
     leg.add(dome);
+    const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 1.6, 8), stone);
+    lantern.position.y = 23.0;
+    leg.add(lantern);
     // the GOLDEN BOY — gilded, softly glowing so he reads from the track
     const gold = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.9, 2.2, 0.5) });
     const boy = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 2.0, 6), gold);
-    boy.position.y = 20.9;
+    boy.position.y = 24.9;
     leg.add(boy);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 6, 5), gold);
-    head.position.y = 22.1;
+    head.position.y = 26.1;
     leg.add(head);
     const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.5, 4), gold);
-    torch.position.set(0.5, 22.3, 0);
+    torch.position.set(0.5, 26.3, 0);
     torch.rotation.z = -0.7;
     leg.add(torch);
-    leg.position.set(34, 0, 40 * S);
+    leg.position.set(38, 0, 40 * S);
     leg.rotation.y = -Math.PI / 2;                      // portico faces the track
     scene.add(leg);
   }
