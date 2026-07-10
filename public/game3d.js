@@ -2110,6 +2110,9 @@ function optionsInput(k) {
     const list = DIP_CHOICES[key];
     const dir = k === 'arrowright' ? 1 : -1;
     DIP[key] = list[(list.indexOf(DIP[key]) + dir + list.length) % list.length];
+    // persist right away so the choice survives ANY exit from the menu
+    // (backgrounded tab, START instead of OPT, killed browser)
+    try { localStorage.setItem('pp_dip', JSON.stringify(DIP)); } catch (e) {}
     AudioFX.beep(660, 0.03, 0.08);
   }
 }
@@ -3031,6 +3034,7 @@ window.__ppInput = (k, down, pt) => {
       if (G.state === 'title' || G.state === 'scores') startGame();
       else if (G.state === 'gameOver') leaveGameOver(true);
       else if (G.state === 'initials') confirmInitial();
+      else if (G.state === 'options') { applyDip(); setState('title'); }  // like keyboard Enter
     }
     return;
   }

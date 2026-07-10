@@ -41,7 +41,13 @@
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
-  #gl { background: #000; }
+  #gl {
+    background: #000;
+    /* touch-action does NOT inherit from body: without this, real iOS
+       Safari runs canvas taps through double-tap-zoom disambiguation,
+       delaying single taps and swallowing rapid ones (menu row taps) */
+    touch-action: none;
+  }
   #hud {
     position: absolute; inset: 0;
     pointer-events: none;
@@ -68,7 +74,7 @@
 <script type="importmap">
 { "imports": { "three": "./lib/three.module.js" } }
 </script>
-<script type="module" src="game3d.js"></script>
-<script src="/touch.js"></script>
+<script type="module" src="game3d.js?v=2"></script>
+<script src="/touch.js?v=2"></script>
 </body>
 </html>
