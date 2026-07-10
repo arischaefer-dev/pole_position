@@ -16,9 +16,10 @@ the classic arcade HUD as a 2D overlay.
   each lap. Run out of time and the game ends.
 - **Scoring**: distance driven (~10,000/lap) + 50 points per car passed
   (tallied at the finish) + 200 points per second remaining at the flag.
-- **Hazards**: touching a car or a roadside billboard explodes your car (it
-  respawns after a moment with brief invulnerability). Puddles make you slip;
-  grass slows you hard.
+- **Hazards**: hitting a roadside billboard explodes your car (it respawns
+  after a moment with brief invulnerability). Other cars can be bumped —
+  trading paint shoves both cars and scrubs speed, and rear-ending someone
+  checks you up hard. Puddles make you slip; grass slows you hard.
 - **Gears**: two-position LO/HI shifter, top speed 315 km/h. The hairpin wants
   low gear at ~130 km/h.
 - The clock ticks at ~2× real time ("game seconds"), just like the cabinet.

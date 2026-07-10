@@ -9,9 +9,9 @@
      time extension at the line each lap.
    - Scoring: distance (~10,000/lap), 50/car passed (tallied
      at the end), 200/second remaining at the finish.
-   - Car or sign contact explodes the car; puddles + grass
-     slow it. LO/HI gears, top speed 315 km/h. Timer ticks at
-     ~2x real time ("game seconds").
+   - Sign contact explodes the car; other cars can be bumped
+     and traded paint with; puddles + grass slow it. LO/HI
+     gears, top 315 km/h. Timer ticks at ~2x real time.
    ============================================================ */
 import * as THREE from 'three';
 import { EffectComposer } from './lib/jsm/postprocessing/EffectComposer.js';
@@ -1936,11 +1936,39 @@ function updateCars(dt) {
     }
     c.ahead = nowAhead;
 
-    if (G.crashed <= 0 && G.invuln <= 0) {
+    // car-to-car contact trades paint instead of exploding: displacement
+    // resolves the overlap every frame, the thud/shake fires once per touch
+    if (c.bumpT > 0) c.bumpT -= dt;
+    if (G.crashed <= 0) {
       const dz = (c.s - G.pos + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
-      if (dz > -4.5 && dz < 5.5 && Math.abs(c.offset - G.playerX) < 1.9 &&
-          G.speed > MAX_SPEED * 0.08) {
-        doCrash();
+      const dx = c.offset - G.playerX;
+      if (dz > -4.8 && dz < 4.8 && Math.abs(dx) < 2.0) {
+        const side = dx !== 0 ? Math.sign(dx) : (c.phase > Math.PI ? 1 : -1);
+        if (Math.abs(dz) < 3.1) {
+          // side-by-side: shove both cars apart, scrub some speed
+          const push = 2.0 - Math.abs(dx);
+          G.playerX -= side * push * 0.75;
+          c.offset = Math.max(-4.2, Math.min(4.2, c.offset + side * push * 0.55));
+          G.speed *= 1 - 1.2 * dt;
+          c.speed *= 1 - 0.6 * dt;
+        } else if (dz > 0) {
+          // player rear-ends the car ahead: match its pace, shunt it on
+          G.speed = Math.min(G.speed, c.speed * 0.92);
+          c.speed = Math.min(MAX_SPEED, c.speed + 4);
+          c.s = wrapS(c.s + (4.8 - dz) * 0.6);
+          G.playerX -= side * 0.5;
+        } else {
+          // rival rear-ends the player: a forward shunt, rival checks up
+          G.speed = Math.min(MAX_SPEED, G.speed + 3);
+          c.speed *= 0.85;
+          c.s = wrapS(c.s - (4.8 + dz) * 0.6);
+        }
+        if (!(c.bumpT > 0)) {
+          c.bumpT = 0.35;
+          G.bumpT = 0.3;
+          AudioFX.beep(85, 0.12, 0.35, 'square');   // metallic thud
+          AudioFX.skid();
+        }
       }
     }
   }
@@ -1949,6 +1977,7 @@ function updateCars(dt) {
 function update(dt) {
   G.stateT += dt;
   if (G.bannerT > 0) { G.bannerT -= dt; if (G.bannerT <= 0) G.banner = null; }
+  if (G.bumpT > 0) G.bumpT -= dt;
   frame++;
   updateExplosion(dt);
   updateEffects(dt);
@@ -2246,6 +2275,10 @@ function updateView() {
     if (sp > 0.85) _eye.y += Math.sin(frame * 2.9) * 0.05;    // top-speed buzz
     if (Math.abs(G.playerX) > HALF_W && G.speed > 8)
       _eye.y += Math.sin(frame * 5.1) * 0.14;                 // off-road judder
+    if (G.bumpT > 0) {                                        // contact jolt
+      _eye.x += Math.sin(frame * 3.1) * 0.24 * (G.bumpT / 0.3);
+      _eye.y += Math.cos(frame * 2.6) * 0.18 * (G.bumpT / 0.3);
+    }
     // speed-sensitive field of view
     const fovT = 66 + 8 * sp;
     if (Math.abs(camera.fov - fovT) > 0.05) {
