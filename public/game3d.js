@@ -288,7 +288,9 @@ function arcPts(cx, cz, r, a0deg, a1deg, n) {
 }
 const TRACKS = {
   fuji: {
-    name: 'FUJI SPEEDWAY', sea: false,
+    name: 'FUJI SPEEDWAY', theme: 'fuji',
+    boards: [{ img: 'pepsi' }, { img: 'cola' }, { img: 'michelin' }, { img: 'castrol' },
+             { img: 'fuji' }, { img: 'pepsi' }, { img: 'cola' }, { img: 'michelin' }],
     cp: [
       [0, -90], [0, 150], [0, 400], [0, 600],              // front straight
       [-30, 700], [-130, 730], [-230, 690],                // T1 sharp right
@@ -306,7 +308,11 @@ const TRACKS = {
     ]
   },
   seaside: {
-    name: 'SEASIDE RUN', sea: true,
+    name: 'SEASIDE RUN', theme: 'seaside',
+    boards: [{ img: 'cola' }, { text: 'SURF SHACK', bg: '#0058f8', fg: '#fcfcfc' },
+             { img: 'michelin' }, { text: 'GELATO', bg: '#fc74b4', fg: '#fcfcfc' },
+             { img: 'pepsi' }, { text: 'MARINA', bg: '#00a8a8', fg: '#fcfcfc' },
+             { img: 'castrol' }, { img: 'cola' }],
     cp: [
       [0, -90], [0, 10], [0, 95], [0, 140],             // grid straight (palm boulevard)
       ...arcPts(-95, 175, 95, 0, 90, 6),                // T1 flat-out sweeper to the coast
@@ -319,6 +325,96 @@ const TRACKS = {
       ...arcPts(-122, -226, 122, 180, 360, 6),          // fast final cap onto the grid
       [0, -158]                                         // collinear grid anchor
     ]
+  },
+  canyon: {
+    name: 'CANYON RUN', theme: 'canyon',
+    boards: [{ text: 'ROUTE 66', bg: '#181818', fg: '#fcfcfc' },
+             { text: 'RED ROCK DINER', bg: '#d81800', fg: '#ffe9c8' },
+             { text: 'DESERT GAS', bg: '#f8b800', fg: '#181818' },
+             { text: 'MOTEL SAGUARO', bg: '#00887c', fg: '#fcfcfc' },
+             { img: 'michelin' }, { img: 'cola' },
+             { text: 'ROUTE 66', bg: '#181818', fg: '#fcfcfc' }],
+    cp: [
+      [0, -150], [0, -20], [0, 120], [0, 165], [0, 195], // grid straight, graduated
+      ...arcPts(-80, 220, 80, 0, 90, 5),                // T1 sweeper
+      [-108, 300], [-138, 300], [-180, 300], [-240, 300], [-268, 300], // mesa run
+      ...arcPts(-290, 250, 50, 90, 180, 5),             // T2 onto the drag strip
+      [-340, 218], [-340, 182], [-340, 120], [-340, 20], [-340, -120], [-340, -260], // MONSTER straight (narrows)
+      [-340, -330], [-340, -360], [-340, -372],         // graduated braking approach
+      ...arcPts(-304, -384, 36, 180, 270, 6),           // T3 brutal right-angle (~28m)
+      [-292, -420], [-278, -420], [-258, -420], [-228, -420], [-160, -420], [-95, -420], // canyon floor
+      ...arcPts(-72, -348, 72, 270, 360, 5),            // T4 back onto the grid
+      [0, -318], [0, -288], [0, -252]                   // collinear grid anchors
+    ]
+  },
+  neon: {
+    name: 'NEON CITY', theme: 'neon',
+    boards: [{ neon: 'ULTRA ARCADE', color: '#ff2bd6' },
+             { neon: 'HOTEL NEON', color: '#2be8ff' },
+             { neon: 'SUSHI BAR', color: '#ffe22b' },
+             { neon: 'CLUB 88', color: '#8f4bff' },
+             { img: 'pepsi' },
+             { neon: 'LATE DINER', color: '#ff7a2b' },
+             { neon: 'KARAOKE', color: '#2bff8a' }],
+    cp: [
+      [0, -190], [0, -60], [0, 90], [0, 145],           // grid boulevard
+      ...arcPts(-60, 185, 60, 0, 90, 5),                // block corner 1
+      [-90, 245], [-122, 245], [-160, 245], [-205, 245], // uptown block, graduated
+      ...arcPts(-230, 193, 52, 90, 180, 5),             // block corner 2
+      [-282, 172], [-282, 150], [-282, 118], [-282, 60], // avenue, graduated
+      [-287, 20], [-322, -15], [-324, -80],             // CHICANE (underpass jog)
+      [-322, -150], [-322, -230], [-322, -300], [-322, -328], // downtown avenue
+      ...arcPts(-270, -345, 52, 180, 270, 5),           // block corner 3
+      [-243, -397], [-212, -397], [-175, -397], [-135, -397], // crosstown block
+      ...arcPts(-85, -312, 85, 270, 360, 5),            // sweeper onto the grid
+      [0, -255]                                         // collinear grid anchor
+    ]
+  },
+  alpine: {
+    name: 'ALPINE PASS', theme: 'alpine',
+    boards: [{ text: 'EDELWEISS', bg: '#7c2c14', fg: '#ffe9c8' },
+             { text: 'ST MORITZ SKI', bg: '#0058f8', fg: '#fcfcfc' },
+             { text: 'GLACIER WATER', bg: '#2bb8e8', fg: '#08303c' },
+             { text: 'ALPENHOTEL', bg: '#186428', fg: '#ffe9c8' },
+             { img: 'castrol' }, { img: 'michelin' },
+             { text: 'CHOCOLAT', bg: '#5c3a1e', fg: '#ffe9c8' }],
+    cp: [
+      [0, -120], [0, -10], [0, 100], [0, 138],          // grid straight
+      ...arcPts(-70, 170, 70, 0, 90, 5),                // T1 into the valley
+      [-98, 240], [-128, 240], [-165, 240], [-193, 240], [-206, 240], // valley run
+      ...arcPts(-220, 270, 30, 270, 90, 8),             // SWITCHBACK A (~20m)
+      [-204, 300], [-186, 300], [-160, 300], [-125, 300], [-105, 300], [-93, 300], // climb ledge
+      ...arcPts(-80, 330, 30, 270, 450, 8),             // SWITCHBACK B (~20m)
+      [-93, 360], [-108, 360], [-132, 360], [-170, 360], [-220, 360], [-275, 360], [-292, 360], // high road
+      ...arcPts(-305, 305, 55, 90, 180, 5),             // crest corner
+      [-360, 282], [-360, 256], [-360, 200], [-360, 90], [-360, -40], [-360, -160], // descent
+      [-360, -208], [-360, -228],                       // graduated sweeper approach
+      ...arcPts(-305, -245, 55, 180, 270, 5),           // valley sweeper
+      [-288, -300], [-272, -300], [-246, -300], [-210, -300], [-165, -300], [-128, -300], // lake shore
+      ...arcPts(-82, -218, 82, 270, 360, 5),            // final corner onto the grid
+      [0, -186], [0, -155]                              // collinear grid anchors
+    ]
+  },
+  jungle: {
+    name: 'JUNGLE RAPIDS', theme: 'jungle',
+    boards: [{ text: 'CAFE RIO', bg: '#5c3a1e', fg: '#ffe9c8' },
+             { text: 'AERO BRASIL', bg: '#00a800', fg: '#f8e848' },
+             { text: 'CARNAVAL', bg: '#fc00a8', fg: '#f8e848' },
+             { text: 'RIO RADIO', bg: '#f8b800', fg: '#181818' },
+             { img: 'cola' }, { img: 'michelin' },
+             { text: 'GUARANA', bg: '#00887c', fg: '#fcfcfc' }],
+    cp: [
+      [0, -140], [0, -30], [0, 90], [0, 135],           // grid straight
+      ...arcPts(-90, 160, 90, 0, 90, 6),                // T1 onto the ridge
+      [-124, 254], [-158, 258], [-215, 242], [-272, 258], [-329, 242], [-372, 254], // CHAINED ESSES
+      ...arcPts(-400, 195, 60, 90, 180, 5),             // bend down to the river
+      [-460, 162], [-460, 132], [-460, 80], [-460, -20], [-460, -120], [-460, -220], // RIVERSIDE straight
+      [-460, -262], [-460, -286],                       // graduated sweeper approach
+      ...arcPts(-402, -304, 58, 180, 270, 5),           // river sweeper
+      [-386, -362], [-368, -362], [-340, -362], [-296, -362], [-248, -362], [-205, -362], // clearing run
+      ...arcPts(-112, -250, 112, 270, 360, 5),          // BIG final carousel
+      [0, -196]                                         // collinear grid anchor
+    ]
   }
 };
 let TRACK_ID = 'fuji';
@@ -327,6 +423,53 @@ try {
   if (TRACKS[d.track]) TRACK_ID = d.track;
 } catch (e) {}
 const CP_RAW = TRACKS[TRACK_ID].cp;
+const THEME = TRACKS[TRACK_ID].theme;
+
+/* per-theme environment: sky gradient, lighting, ground, mountains, water */
+const ENVS = {
+  fuji: {
+    bg: 0x3cbcfc, fog: [0xaedcf7, 700, 2300],
+    sky: ['#155fc4', '#4fb2f0', '#a8ddff', '#ffe6c4'],
+    hemi: [0xbfe0ff, 0x3f7d2f, 0.7], amb: 0.22, sun: [0xfff2dd, 3.0],
+    envSky: 0x86c8f2, envGnd: 0x3f8f3f,
+    grass: ['#278c31', ['#237e2b', '#2f9a39', '#289232', '#1f7527']],
+    mt: [0x2e7d3a, 0x7fa8bf], pud: [0x35506a, 0x4a6a8a]
+  },
+  canyon: {
+    bg: 0x7fb4e8, fog: [0xf0d2a0, 650, 2200],
+    sky: ['#3a78c9', '#7fb4e8', '#f5cf9a', '#ffb46a'],
+    hemi: [0xffe8c0, 0x9a6f42, 0.65], amb: 0.24, sun: [0xffe9c8, 3.0],
+    envSky: 0xf0c890, envGnd: 0xc09a5f,
+    grass: ['#d8b070', ['#cda45f', '#e0bc7e', '#d2a869', '#c69c58']],
+    mt: [0xb05a34, 0xd89a6a], pud: [0x35506a, 0x4a6a8a]
+  },
+  neon: {
+    bg: 0x0a0a18, fog: [0x0d0d20, 450, 1700], night: true,
+    sky: ['#03030a', '#080a1a', '#101430', '#241a3c'],
+    hemi: [0x2a3a6a, 0x0c0c16, 0.4], amb: 0.18, sun: [0x9ab8ff, 1.1],
+    envSky: 0x10142a, envGnd: 0x0a0a12,
+    grass: ['#16161e', ['#12121a', '#1a1a24', '#141420', '#101018']],
+    mt: [0x11131c, 0x1c2030], pud: [0x24335a, 0x36497a]
+  },
+  alpine: {
+    bg: 0xcfe8f8, fog: [0xe8f4fc, 650, 2300],
+    sky: ['#4a86d8', '#9cc8ee', '#e8f4fc', '#ffffff'],
+    hemi: [0xeaf4ff, 0xcfd8de, 0.75], amb: 0.26, sun: [0xfff8ee, 3.1],
+    envSky: 0xbfe0f4, envGnd: 0xd8e4ea,
+    grass: ['#e8eef2', ['#dde6ec', '#f2f6f8', '#d2dce4', '#e4ecf0']],
+    mt: [0x7d8894, 0xc4d2de], pud: [0x9fc4e0, 0xc4e2f4]   // ICE
+  },
+  jungle: {
+    bg: 0x6cc0e0, fog: [0xc8ecd0, 550, 2000],
+    sky: ['#2a7ec4', '#6cc0e0', '#c4ecd8', '#f4ffd8'],
+    hemi: [0xd8f4e0, 0x1e5c28, 0.7], amb: 0.22, sun: [0xfff6d8, 2.8],
+    envSky: 0x9adcc8, envGnd: 0x2a6e34,
+    grass: ['#1d6e26', ['#175c1e', '#238032', '#1a6822', '#14521c']],
+    mt: [0x1e6c30, 0x6aa89c], pud: [0x35506a, 0x4a6a8a]
+  }
+};
+ENVS.seaside = ENVS.fuji;
+const ENV = ENVS[THEME];
 
 let TRACK_SCALE = 1;   // CP_RAW units -> meters, for placing scenery by CP coords
 function buildTrackCurve() {
@@ -408,14 +551,14 @@ renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(C.sky);
-scene.fog = new THREE.Fog(0xaedcf7, 700, 2300);
+scene.background = new THREE.Color(ENV.bg);
+scene.fog = new THREE.Fog(ENV.fog[0], ENV.fog[1], ENV.fog[2]);
 const camera = new THREE.PerspectiveCamera(68, GLW / GLH, 1, 4000);
-scene.add(new THREE.HemisphereLight(0xbfe0ff, 0x3f7d2f, 0.7));
-scene.add(new THREE.AmbientLight(0xffffff, 0.22));
-// shadow-casting sun; its frustum follows the player each frame
+scene.add(new THREE.HemisphereLight(ENV.hemi[0], ENV.hemi[1], ENV.hemi[2]));
+scene.add(new THREE.AmbientLight(0xffffff, ENV.amb));
+// shadow-casting sun (moon on night tracks); frustum follows the player
 const SUN_DIR = new THREE.Vector3(0.49, 0.52, 0.7).normalize();
-const sun = new THREE.DirectionalLight(0xfff2dd, 3.0);
+const sun = new THREE.DirectionalLight(ENV.sun[0], ENV.sun[1]);
 sun.position.copy(SUN_DIR).multiplyScalar(220);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -431,10 +574,10 @@ scene.add(sun.target);
   const envScene = new THREE.Scene();
   envScene.add(new THREE.Mesh(
     new THREE.SphereGeometry(40, 16, 8),
-    new THREE.MeshBasicMaterial({ color: 0x86c8f2, side: THREE.BackSide })));
+    new THREE.MeshBasicMaterial({ color: ENV.envSky, side: THREE.BackSide })));
   const envGround = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 80),
-    new THREE.MeshBasicMaterial({ color: 0x3f8f3f }));
+    new THREE.MeshBasicMaterial({ color: ENV.envGnd }));
   envGround.rotation.x = -Math.PI / 2;
   envGround.position.y = -2;
   envScene.add(envGround);
@@ -470,9 +613,9 @@ composer.addPass(new OutputPass());
 /* ground */
 {
   const grassTex = canvasTexture(128, 128, (g) => {
-    g.fillStyle = '#278c31'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = ENV.grass[0]; g.fillRect(0, 0, 128, 128);
     for (let i = 0; i < 1400; i++) {
-      g.fillStyle = ['#237e2b', '#2f9a39', '#289232', '#1f7527'][i % 4];
+      g.fillStyle = ENV.grass[1][i % 4];
       g.fillRect(Math.floor(Math.random() * 128), Math.floor(Math.random() * 128), 2, 2);
     }
   });
@@ -573,8 +716,8 @@ function buildRoad() {
 }
 buildRoad();
 
-/* scenery: Mt Fuji, mountain ring, clouds */
-if (TRACKS[TRACK_ID].sea) {
+/* scenery: per-theme world dressing */
+if (THEME === 'seaside') {
   const S = TRACK_SCALE;
   // ocean + sandy shore hugging the west side (the coast road runs along it)
   const sea = new THREE.Mesh(
@@ -768,6 +911,190 @@ if (TRACKS[TRACK_ID].sea) {
     scene.add(boat);
   }
 }
+if (THEME === 'canyon') {
+  const S = TRACK_SCALE;
+  // red-rock mesas and buttes on the horizon
+  const rockMats = [0xb05a34, 0xc26a3e, 0x9c4e2c].map(
+    c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+  const capMat = new THREE.MeshLambertMaterial({ color: 0xd8956a, flatShading: true });
+  const mesaSpots = [[380, 430], [620, -140], [-780, 560], [-860, -320],
+    [230, -840], [-300, 900], [-980, 140], [760, 320]];
+  mesaSpots.forEach(([mx, mz], i) => {
+    const r = 70 + (i * 37) % 60, h = 34 + (i * 23) % 26;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r, h, 9), rockMats[i % 3]);
+    base.position.set(mx, h / 2 - 1, mz);
+    scene.add(base);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.8, 10, 9), capMat);
+    cap.position.set(mx, h + 4, mz);
+    scene.add(cap);
+  });
+  // the NARROWS: rock walls flanking the monster straight
+  for (let s = 830; s < 1340; s += 24) {
+    for (const sideSign of [-1, 1]) {
+      const w = 7 + (s * 7 % 5), h = 9 + ((s + sideSign * 40) * 13 % 8);
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, 21), rockMats[(s / 24 | 0) % 3]);
+      posAt(s + (sideSign > 0 ? 11 : 0), sideSign * (HALF_W + 8.5 + (s * 11 % 4)), wall.position);
+      wall.position.y = h / 2 - 0.5;
+      wall.rotation.y = headingAt(s) + (s * 17 % 10) * 0.03;
+      wall.castShadow = true;
+      scene.add(wall);
+    }
+  }
+  // scattered boulders + a couple of tumbleweeds
+  const bMat = new THREE.MeshLambertMaterial({ color: 0xa86a48, flatShading: true });
+  for (let i = 0; i < 12; i++) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9 + (i * 7) % 3 * 0.55, 0), bMat);
+    posAt((i * 167.3) % TRACK_LEN, (i % 2 ? 1 : -1) * (HALF_W + 8 + (i * 11) % 15), rock.position);
+    rock.position.y = 0.4;
+    rock.rotation.set(i, i * 2.1, 0);
+    rock.castShadow = true;
+    scene.add(rock);
+  }
+}
+if (THEME === 'neon') {
+  // skyline of lit towers ringing the circuit
+  const winTexes = [];
+  for (let t = 0; t < 3; t++) {
+    winTexes.push(canvasTexture(64, 128, (g) => {
+      g.fillStyle = '#0b0d16'; g.fillRect(0, 0, 64, 128);
+      for (let y = 4; y < 124; y += 7) {
+        for (let x = 4; x < 60; x += 6) {
+          if (Math.random() < 0.42) {
+            g.fillStyle = ['#ffd982', '#b8d8ff', '#ffe9c0', '#9fc4ff'][(x + y + t) % 4];
+            g.fillRect(x, y, 3, 4);
+          }
+        }
+      }
+    }));
+    winTexes[t].magFilter = THREE.LinearFilter;
+  }
+  for (let i = 0; i < 30; i++) {
+    const s = i * (TRACK_LEN / 30);
+    const side = (i % 2 ? 1 : -1) * (58 + (i * 29) % 75);
+    const w = 15 + (i * 7) % 12, d = 15 + (i * 11) % 12, h = 30 + (i * 37) % 58;
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshBasicMaterial({ map: winTexes[i % 3] }));
+    posAt(s, side, tower.position);
+    // the street circuit doubles back on itself — never drop a tower on
+    // (or hard against) another leg of the road
+    let clear = true;
+    for (let j = 0; j < N_SAMP; j += 12) {
+      const dx = PTS[j].x - tower.position.x, dz = PTS[j].z - tower.position.z;
+      if (dx * dx + dz * dz < (w / 2 + HALF_W + 6) ** 2) { clear = false; break; }
+    }
+    if (!clear) continue;
+    tower.position.y = h / 2 - 1;
+    tower.rotation.y = (i * 13) % 7 * 0.22;
+    scene.add(tower);
+    if (i % 5 === 0) {   // rooftop beacon
+      const bcn = new THREE.Mesh(new THREE.SphereGeometry(0.7, 6, 5),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 0.6, 0.6) }));
+      bcn.position.set(tower.position.x, h + 0.4, tower.position.z);
+      scene.add(bcn);
+    }
+  }
+}
+if (THEME === 'alpine') {
+  const S = TRACK_SCALE;
+  // close snowy peaks looming over the pass
+  const rockMat2 = new THREE.MeshLambertMaterial({ color: 0x7d8894, flatShading: true });
+  const snowMat2 = new THREE.MeshLambertMaterial({ color: 0xf6fafc, flatShading: true });
+  const peaks = [[520, 620], [-900, 700], [-1050, -250], [420, -700], [-200, 1050], [900, -60]];
+  peaks.forEach(([px, pz], i) => {
+    const r = 300 + (i * 67) % 180, h = 240 + (i * 91) % 160;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 9), rockMat2);
+    cone.position.set(px, h / 2 - 6, pz);
+    scene.add(cone);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.38, h * 0.34, 9), snowMat2);
+    cap.position.set(px, h - h * 0.17, pz);
+    scene.add(cap);
+  });
+  // chalets in the valley
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xe8dcc8 });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0x6e4a2c });
+  const winMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2.6, 1.2) });
+  for (let i = 0; i < 5; i++) {
+    const ch = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 6.5), wallMat);
+    body.position.y = 2;
+    body.castShadow = true;
+    ch.add(body);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.2, 4), roofMat);
+    roof.position.y = 5.6;
+    roof.rotation.y = Math.PI / 4;
+    roof.scale.z = 0.78;
+    roof.castShadow = true;
+    ch.add(roof);
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), winMat);
+    win.position.set(2.2, 2.1, 3.28);
+    ch.add(win);
+    const spots2 = [[240, 26], [640, -24], [1180, 30], [1520, -26], [1900, 24]];
+    posAt(spots2[i][0], (spots2[i][1] > 0 ? 1 : -1) * (HALF_W + Math.abs(spots2[i][1])), ch.position);
+    ch.rotation.y = headingAt(spots2[i][0]) + (i % 2 ? 0.6 : -0.6);
+    scene.add(ch);
+  }
+  // snowbanks walling the switchback corridor
+  const bankMat = new THREE.MeshLambertMaterial({ color: 0xf2f6f8, flatShading: true });
+  for (const [s0, s1] of [[462, 596], [664, 800]]) {
+    for (let s = s0; s < s1; s += 7) {
+      for (const sideSign of [-1, 1]) {
+        const bank = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.0, 6.4), bankMat);
+        posAt(s + (sideSign > 0 ? 3 : 0), sideSign * (HALF_W + 2.4), bank.position);
+        bank.position.y = 0.28;
+        bank.rotation.y = headingAt(s);
+        bank.rotation.z = (s * 13 % 7) * 0.02;
+        scene.add(bank);
+      }
+    }
+  }
+}
+if (THEME === 'jungle') {
+  const S = TRACK_SCALE;
+  // the river running beside the long straight, with a waterfall at its head
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(36, 640),
+    new THREE.MeshStandardMaterial({ color: 0x1f8a96, roughness: 0.2, metalness: 0.5 }));
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(-492 * S, -0.22, -60 * S);
+  scene.add(water);
+  for (const [w, off, op] of [[3, 0, 0.5], [2, 7, 0.3]]) {   // bank foam
+    const foam = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, 640),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: op }));
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(-476 * S - off, -0.16, -60 * S);
+    scene.add(foam);
+  }
+  {  // waterfall cliff at the north head of the river
+    const cliff = new THREE.Mesh(new THREE.BoxGeometry(42, 18, 16),
+      new THREE.MeshLambertMaterial({ color: 0x4e5e46, flatShading: true }));
+    cliff.position.set(-492 * S, 8, 275 * S);
+    cliff.castShadow = true;
+    scene.add(cliff);
+    const fallMat = new THREE.MeshBasicMaterial({
+      color: 0xeafcff, transparent: true, opacity: 0.85 });
+    for (const fx of [-10, 0, 11]) {
+      const fall = new THREE.Mesh(new THREE.PlaneGeometry(8 - Math.abs(fx) * 0.2, 16), fallMat);
+      fall.position.set(-492 * S + fx, 8, 275 * S - 8.2);
+      scene.add(fall);
+    }
+    // mist at the plunge pool
+    const mistTex = canvasTexture(64, 64, (g) => {
+      const grad = g.createRadialGradient(32, 32, 3, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,0.8)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+    });
+    for (let i = 0; i < 4; i++) {
+      const mist = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: mistTex, transparent: true, opacity: 0.4, depthWrite: false }));
+      mist.position.set(-492 * S + (i - 1.5) * 9, 2.4, 275 * S - 12);
+      mist.scale.setScalar(9 + (i % 2) * 4);
+      scene.add(mist);
+    }
+  }
+}
 {
   const fuji = new THREE.Group();
   const cone = new THREE.Mesh(
@@ -780,9 +1107,9 @@ if (TRACKS[TRACK_ID].sea) {
   snow.position.y = 300 - 55 + 1;
   fuji.add(cone, snow);
   fuji.position.set(-700, 0, 1900);
-  if (!TRACKS[TRACK_ID].sea) scene.add(fuji);   // no volcano at the seaside
+  if (THEME === 'fuji') scene.add(fuji);   // the volcano is Fuji-only
 
-  const mtNear = new THREE.Color(0x2e7d3a), mtFar = new THREE.Color(0x7fa8bf);
+  const mtNear = new THREE.Color(ENV.mt[0]), mtFar = new THREE.Color(ENV.mt[1]);
   for (let i = 0; i < 12; i++) {
     const a = i / 12 * Math.PI * 2 + 0.26;
     const r = 1350 + (i % 3) * 260;
@@ -790,26 +1117,35 @@ if (TRACKS[TRACK_ID].sea) {
       color: mtNear.clone().lerp(mtFar, (i % 3) / 2.4), flatShading: true });
     const m = new THREE.Mesh(new THREE.ConeGeometry(260 + (i % 4) * 90, 110 + (i % 3) * 60, 7), mtMat);
     m.position.set(Math.cos(a) * r - 300, (110 + (i % 3) * 60) / 2 - 4, Math.sin(a) * r + 300);
-    if (TRACKS[TRACK_ID].sea && m.position.x < 150) continue;   // ocean side stays open
+    if (THEME === 'seaside' && m.position.x < 150) continue;   // ocean side stays open
+    if (THEME === 'jungle' && m.position.x < -300) continue;     // river side stays open
     scene.add(m);
   }
-  // gradient sky dome + sun
-  const skyTex = canvasTexture(16, 256, (g) => {
+  // gradient sky dome + sun (stars + moon on night tracks)
+  const skyTex = canvasTexture(ENV.night ? 512 : 16, 256, (g, w) => {
     const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#155fc4');
-    grad.addColorStop(0.5, '#4fb2f0');
-    grad.addColorStop(0.82, '#a8ddff');
-    grad.addColorStop(1, '#ffe6c4');
+    grad.addColorStop(0, ENV.sky[0]);
+    grad.addColorStop(0.5, ENV.sky[1]);
+    grad.addColorStop(0.82, ENV.sky[2]);
+    grad.addColorStop(1, ENV.sky[3]);
     g.fillStyle = grad;
-    g.fillRect(0, 0, 16, 256);
+    g.fillRect(0, 0, w, 256);
+    if (ENV.night) {
+      for (let i = 0; i < 340; i++) {
+        const y = Math.random() * 190;
+        g.fillStyle = 'rgba(255,255,255,' + (0.35 + Math.random() * 0.65).toFixed(2) + ')';
+        g.fillRect(Math.floor(Math.random() * w), Math.floor(y), Math.random() < 0.15 ? 2 : 1, 1);
+      }
+    }
   });
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(3300, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }));
   scene.add(dome);
   const sunDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(120, 24),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.8, 3.9), fog: false }));
+    new THREE.CircleGeometry(ENV.night ? 90 : 120, 24),
+    new THREE.MeshBasicMaterial({ color: ENV.night
+      ? new THREE.Color(3.2, 3.4, 3.8) : new THREE.Color(5, 4.8, 3.9), fog: false }));
   sunDisc.position.copy(SUN_DIR).multiplyScalar(2700);
   sunDisc.lookAt(0, 0, 0);
   scene.add(sunDisc);
@@ -822,9 +1158,10 @@ if (TRACKS[TRACK_ID].sea) {
     g.fillRect(0, 0, 128, 128);
   });
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTex, transparent: true, depthWrite: false, fog: false }));
+    map: glowTex, transparent: true, depthWrite: false, fog: false,
+    opacity: ENV.night ? 0.5 : 1 }));
   glow.position.copy(SUN_DIR).multiplyScalar(2650);
-  glow.scale.setScalar(900);
+  glow.scale.setScalar(ENV.night ? 480 : 900);
   scene.add(glow);
   // soft cloud sprites (always face the camera)
   const cloudTex = canvasTexture(128, 64, (g) => {
@@ -837,7 +1174,7 @@ if (TRACKS[TRACK_ID].sea) {
       g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
     }
   });
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < (ENV.night ? 0 : 12); i++) {
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({
       map: cloudTex, transparent: true, depthWrite: false, fog: false }));
     const a = i / 12 * Math.PI * 2 + 0.7;
@@ -864,8 +1201,19 @@ function billboardTex(text, bg, fg) {
   return canvasTexture(176, 88, (g) => {
     g.fillStyle = '#fcfcfc'; g.fillRect(0, 0, 176, 88);
     g.fillStyle = bg; g.fillRect(8, 8, 160, 72);
-    const tw = text.length * 6 * 3 - 3;
-    pixelText(g, text, Math.floor((176 - tw) / 2), 24, fg, 3);
+    const sc = text.length * 6 * 3 - 3 <= 156 ? 3 : 2;   // auto-fit long names
+    const tw = text.length * 6 * sc - sc;
+    pixelText(g, text, Math.floor((176 - tw) / 2), 44 - sc * 7, fg, sc);
+  });
+}
+function neonTex(text, color) {
+  return canvasTexture(176, 88, (g) => {
+    g.fillStyle = '#07070d'; g.fillRect(0, 0, 176, 88);
+    g.strokeStyle = color; g.lineWidth = 3;
+    g.strokeRect(6, 6, 164, 76);
+    const sc = text.length * 6 * 3 - 3 <= 148 ? 3 : 2;
+    const tw = text.length * 6 * sc - sc;
+    pixelText(g, text, Math.floor((176 - tw) / 2), 44 - sc * 7, color, sc);
   });
 }
 function arrowTex(dir) {
@@ -953,8 +1301,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
     }
     return boardTexCache[name];
   };
-  const boards = ['pepsi', 'cola', 'michelin', 'castrol',
-                  'fuji', 'pepsi', 'cola', 'michelin'];
+  const boards = TRACKS[TRACK_ID].boards;
   // pick straight spots: low curvature, spaced apart
   const spots = [];
   let sScan = 40;
@@ -968,7 +1315,15 @@ let puddleMat = null;     // shared puddle material (shimmers)
   }
   spots.forEach((s, i) => {
     const side = (i % 2 ? 1 : -1) * (HALF_W + 4.5);
-    const m = makeSignMesh(boardTex(boards[i]), 8, 4, 1.6);
+    const b = boards[i];
+    const tex = b.img ? boardTex(b.img)
+      : b.neon ? neonTex(b.neon, b.color)
+      : billboardTex(b.text, b.bg, b.fg);
+    const m = makeSignMesh(tex, 8, 4, 1.6);
+    if (b.neon) {   // HDR-boost the panel so the tubes bloom at night
+      const panel = m.children[0];
+      panel.material.color.setRGB(3.4, 3.4, 3.4);
+    }
     posAt(s, side, m.position);
     m.rotation.y = headingAt(s) + Math.PI;
     scene.add(m);
@@ -979,7 +1334,7 @@ let puddleMat = null;     // shared puddle material (shimmers)
   // reflects the pale horizon from afar and camouflages into the road.
   // polygonOffset beats the road's -2 (car shadow at -4 still wins).
   puddleMat = new THREE.MeshStandardMaterial({
-    color: 0x35506a, metalness: 0.75, roughness: 0.12,
+    color: ENV.pud[0], metalness: 0.75, roughness: 0.12,
     polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
   const pudMat = puddleMat;
   const pudSpots = [[spots[1] + 45 || 150, 2.2], [spots[3] + 50 || 600, -2.0], [spots[6] + 40 || 1500, 1.4]];
@@ -1119,24 +1474,108 @@ let puddleMat = null;     // shared puddle material (shimmers)
     stand.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(stand);
   }
-  // trees scattered around the rest of the lap
+  // trackside vegetation / street furniture, themed per locale
   const leafMat = new THREE.MeshLambertMaterial({ color: 0x00841c, flatShading: true });
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x7c5400 });
-  for (let i = 0; i < 26; i++) {
-    const s = 200 + (i * 71.7) % (TRACK_LEN - 320);
-    const side = (i % 2 ? 1 : -1) * (HALF_W + 12 + (i * 7) % 10);
-    const tree = new THREE.Group();
-    const h = 5 + (i * 13) % 4;
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, h, 7), leafMat);
-    cone.position.y = h / 2 + 1.2;
-    const blob = new THREE.Mesh(new THREE.SphereGeometry(1.7, 8, 6), leafMat);
-    blob.position.set(0.4, h * 0.45, 0.3);
-    const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), trunkMat);
-    trunk.position.y = 0.8;
-    cone.castShadow = blob.castShadow = trunk.castShadow = true;
-    tree.add(cone, blob, trunk);
-    posAt(s, side, tree.position);
-    scene.add(tree);
+  if (THEME === 'canyon') {
+    // saguaro cacti
+    const cacMat = new THREE.MeshLambertMaterial({ color: 0x4f8d3a, flatShading: true });
+    for (let i = 0; i < 26; i++) {
+      const s = 200 + (i * 71.7) % (TRACK_LEN - 320);
+      const side = (i % 2 ? 1 : -1) * (HALF_W + 11 + (i * 7) % 12);
+      const cac = new THREE.Group();
+      const h = 3.6 + (i * 13) % 3;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, h, 7), cacMat);
+      trunk.position.y = h / 2;
+      trunk.castShadow = true;
+      cac.add(trunk);
+      for (const sx of [-1, 1]) {
+        if ((i + (sx + 1) / 2) % 3 === 0) continue;      // some one-armed ones
+        const elbow = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 1.0, 6), cacMat);
+        elbow.rotation.z = Math.PI / 2;
+        elbow.position.set(sx * 0.6, h * 0.45, 0);
+        cac.add(elbow);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 1.7, 6), cacMat);
+        arm.position.set(sx * 1.0, h * 0.45 + 0.8, 0);
+        arm.castShadow = true;
+        cac.add(arm);
+      }
+      cac.rotation.y = i * 1.3;
+      posAt(s, side, cac.position);
+      scene.add(cac);
+    }
+  } else if (THEME === 'neon') {
+    // streetlights with blooming sodium heads
+    const poleMat3 = new THREE.MeshLambertMaterial({ color: 0x3a3f48 });
+    const headMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(5.5, 5.0, 3.4) });
+    for (let i = 0; i < 36; i++) {
+      const s = 60 + i * ((TRACK_LEN - 120) / 36);
+      const side = (i % 2 ? 1 : -1) * (HALF_W + 3.0);
+      const lamp = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.17, 7, 6), poleMat3);
+      pole.position.y = 3.5;
+      pole.castShadow = true;
+      lamp.add(pole);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.14), poleMat3);
+      arm.position.set(-Math.sign(side) * 0.8, 6.9, 0);
+      lamp.add(arm);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.36), headMat);
+      head.position.set(-Math.sign(side) * 1.5, 6.82, 0);
+      lamp.add(head);
+      posAt(s, side, lamp.position);
+      lamp.rotation.y = headingAt(s);
+      scene.add(lamp);
+    }
+  } else if (THEME === 'jungle') {
+    // layered rainforest canopy
+    const greens = [0x14601c, 0x1d7a26, 0x0f5216, 0x268a30].map(
+      c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    for (let i = 0; i < 36; i++) {
+      const s = 160 + (i * 53.3) % (TRACK_LEN - 260);
+      const side = (i % 2 ? 1 : -1) * (HALF_W + 9 + (i * 7) % 14);
+      const tree = new THREE.Group();
+      const h = 7 + (i * 13) % 5;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.55, h, 6), trunkMat);
+      trunk.position.y = h / 2;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      for (let b = 0; b < 3; b++) {
+        const blob = new THREE.Mesh(new THREE.SphereGeometry(2.4 + (i + b) % 3 * 0.8, 8, 6),
+          greens[(i + b) % 4]);
+        blob.position.set(Math.cos(b * 2.2 + i) * 1.6, h - 0.6 + b * 1.3,
+          Math.sin(b * 2.2 + i) * 1.6);
+        blob.scale.y = 0.72;
+        blob.castShadow = true;
+        tree.add(blob);
+      }
+      posAt(s, side, tree.position);
+      scene.add(tree);
+    }
+  } else {
+    // pines (fuji / seaside / alpine — denser in the mountains)
+    const nTrees = THEME === 'alpine' ? 38 : 26;
+    for (let i = 0; i < nTrees; i++) {
+      const s = 200 + (i * 71.7) % (TRACK_LEN - 320);
+      const side = (i % 2 ? 1 : -1) * (HALF_W + 12 + (i * 7) % 10);
+      const tree = new THREE.Group();
+      const h = 5 + (i * 13) % 4;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, h, 7), leafMat);
+      cone.position.y = h / 2 + 1.2;
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(1.7, 8, 6), leafMat);
+      blob.position.set(0.4, h * 0.45, 0.3);
+      const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), trunkMat);
+      trunk.position.y = 0.8;
+      cone.castShadow = blob.castShadow = trunk.castShadow = true;
+      tree.add(cone, blob, trunk);
+      if (THEME === 'alpine') {                       // snow-dusted crown
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.6, 7),
+          new THREE.MeshLambertMaterial({ color: 0xf2f6f8, flatShading: true }));
+        cap.position.y = h + 1.0;
+        tree.add(cap);
+      }
+      posAt(s, side, tree.position);
+      scene.add(tree);
+    }
   }
 
   // armco barriers: grid straight both sides + the hairpin outside
@@ -1517,7 +1956,8 @@ const QUAL_TABLE = [
 const GAME_TIME_RATE = 2;
 const QUAL_TIME = 90;
 /* operator "dip switch" settings, same ranges as the arcade cabinet */
-const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60], track: ['fuji', 'seaside'] };
+const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60],
+  track: ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle'] };
 const DIP = { laps: 3, time: 90, ext: 60, track: 'fuji' };
 try {
   const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
@@ -2195,7 +2635,7 @@ function updateView() {
 
   // puddles shimmer
   if (puddleMat && (frame & 3) === 0)
-    puddleMat.color.setHex(Math.sin(frame * 0.09) > 0 ? 0x35506a : 0x4a6a8a);
+    puddleMat.color.setHex(Math.sin(frame * 0.09) > 0 ? ENV.pud[0] : ENV.pud[1]);
 
   // player car
   playerMesh.visible = driving && G.crashed <= 0 &&

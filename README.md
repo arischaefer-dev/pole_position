@@ -52,12 +52,24 @@ best-lap tracking, voice announcements, checkered flags on the final lap,
 and an options menu mirroring the original operator dip-switch ranges.
 Progress persists in `localStorage`.
 
-Two circuits, selectable from the options menu: the stylized **Fuji
-Speedway**, and **Seaside Run** — a palm-lined coast road with a fast
-opening sweeper, a climbing carousel, a hairpin looping a lighthouse
-headland, beach esses past the pier, and a flat-out cap back onto the
-boulevard. Plus a live minimap during play and a TV-style race replay
-(press R after a run) filmed from trackside cameras.
+Six circuits, selectable from the options menu, each with its own scenery
+and local sponsor boards:
+
+- **Fuji Speedway** — the stylized arcade original: long straight, sharp
+  right, sweeping horseshoe, the left hairpin.
+- **Seaside Run** — palm-lined coast road, climbing carousel, a hairpin
+  looping a lighthouse headland, beach esses past the pier.
+- **Canyon Run** — desert speed track: a monster drag straight through
+  red-rock narrows into a brutal right-angle, mesas and saguaros beyond.
+- **Neon City** — night street circuit: 90-degree blocks, a tight chicane,
+  starlit sky, lit skyscrapers, streetlights and glowing neon signs.
+- **Alpine Pass** — snowbound and technical: a stacked double switchback
+  walled with snowbanks, chalets, icy patches instead of puddles.
+- **Jungle Rapids** — flowing rainforest esses, a riverside straight with a
+  waterfall, layered canopy all around.
+
+Plus a live minimap during play and a TV-style race replay (press R after
+a run) filmed from trackside cameras.
 
 ## Running
 
