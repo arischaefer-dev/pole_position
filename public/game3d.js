@@ -415,6 +415,29 @@ const TRACKS = {
       ...arcPts(-112, -250, 112, 270, 360, 5),          // BIG final carousel
       [0, -196]                                         // collinear grid anchor
     ]
+  },
+  peg: {
+    name: 'WINNIPEG', theme: 'peg',
+    boards: [{ img: 'canada' }, { img: 'manitoba' },
+             { text: 'PORTAGE MAIN', bg: '#181818', fg: '#fcfcfc' },
+             { text: 'THE FORKS', bg: '#00887c', fg: '#fcfcfc' },
+             { text: 'PRAIRIE CHIPS', bg: '#f8b800', fg: '#181818' },
+             { text: 'RED RIVER ALE', bg: '#7c2c14', fg: '#ffe9c8' },
+             { text: 'WPG HOCKEY', bg: '#041e42', fg: '#fcfcfc' },
+             { text: 'NESTAWEYA', bg: '#0058f8', fg: '#fcfcfc' }],
+    cp: [
+      [0, -190], [0, -60], [0, 90], [0, 180],           // Broadway grid straight (Legislature)
+      ...arcPts(-95, 240, 95, 0, 90, 5),                // T1 fast sweeper
+      [-150, 335], [-200, 335], [-228, 335],            // downtown link
+      ...arcPts(-250, 290, 45, 90, 180, 6),             // PORTAGE & MAIN (hard 90, ~35m)
+      [-295, 268], [-295, 246], [-295, 214], [-295, 140], // Main Street south, graduated
+      [-303, 80], [-345, 30], [-350, -40],              // Exchange District esses
+      [-348, -120], [-348, -200], [-348, -245], [-348, -270], // run down to the river
+      ...arcPts(-293, -298, 55, 180, 270, 5),           // river bend
+      [-268, -353], [-248, -353], [-215, -353], [-175, -353], [-135, -353], // RIVERSIDE straight
+      ...arcPts(-105, -248, 105, 270, 360, 5),          // CONFLUENCE sweeper onto the grid
+      [0, -222]                                         // collinear grid anchor
+    ]
   }
 };
 let TRACK_ID = 'fuji';
@@ -466,6 +489,16 @@ const ENVS = {
     envSky: 0x9adcc8, envGnd: 0x2a6e34,
     grass: ['#1d6e26', ['#175c1e', '#238032', '#1a6822', '#14521c']],
     mt: [0x1e6c30, 0x6aa89c], pud: [0x35506a, 0x4a6a8a]
+  }
+,
+  peg: {
+    bg: 0x59b0f0, fog: [0xcfe8fa, 700, 2400],
+    sky: ['#1b64c8', '#59b0f0', '#bfe4ff', '#ffe9c0'],   // big prairie sky
+    hemi: [0xdceeff, 0x557a34, 0.72], amb: 0.22, sun: [0xfff2dd, 3.0],
+    envSky: 0x9fd0f0, envGnd: 0x6f9a3f,
+    grass: ['#7ba03c', ['#6f9436', '#8fae4a', '#c9a84c', '#5f8830']],
+    mt: null,                                            // pancake-flat prairie
+    pud: [0x35506a, 0x4a6a8a]
   }
 };
 ENVS.seaside = ENVS.fuji;
@@ -1096,6 +1129,209 @@ if (THEME === 'jungle') {
     }
   }
 }
+if (THEME === 'peg') {
+  const S = TRACK_SCALE;
+  // Red River along the riverside straight, Assiniboine joining from the
+  // west — the two meet at the confluence (The Forks) by the river bend
+  const waterMat = new THREE.MeshStandardMaterial({
+    color: 0x4a6a52, roughness: 0.24, metalness: 0.5 });   // prairie-river green-brown
+  const red = new THREE.Mesh(new THREE.PlaneGeometry(640, 46), waterMat);
+  red.rotation.x = -Math.PI / 2;
+  red.position.set(-115 * S, -0.22, -402 * S);
+  scene.add(red);
+  const assiniboine = new THREE.Mesh(new THREE.PlaneGeometry(38, 500), waterMat);
+  assiniboine.rotation.x = -Math.PI / 2;
+  assiniboine.position.set(-402 * S, -0.22, -140 * S);
+  scene.add(assiniboine);
+  for (const [dx, dz, w, l, rot] of [[-115 * S, -381 * S, 640, 3, 0], [-383 * S, -140 * S, 3, 500, 0]]) {
+    const foam = new THREE.Mesh(new THREE.PlaneGeometry(w, l),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(dx, -0.16, dz);
+    scene.add(foam);
+  }
+
+  // Esplanade Riel: side-spar cable-stayed footbridge over the Red River
+  {
+    const er = new THREE.Group();
+    const white = new THREE.MeshStandardMaterial({ color: 0xf2f2f0, roughness: 0.5 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.7, 58), white);
+    deck.position.y = 6.5;
+    deck.castShadow = true;
+    er.add(deck);
+    for (const dz of [-24, 24]) {                       // approach piers
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(3, 6.5, 1.6), white);
+      pier.position.set(0, 3.25, dz);
+      er.add(pier);
+    }
+    const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.0, 30, 8), white);
+    pylon.position.set(0, 6.5 + 13.5, 2);
+    pylon.rotation.x = 0.34;                            // the signature inclined spar
+    pylon.castShadow = true;
+    er.add(pylon);
+    for (let c = 0; c < 6; c++) {                       // cable fan
+      const t = c / 5;
+      const ax = 0, ay = 6.5 + 26 - t * 5, az = 2 - Math.tan(0.34) * (26 - t * 5);
+      const bx = 0, by = 6.9, bz = -22 + t * 42;
+      const len = Math.hypot(ay - by, az - bz);
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 4), white);
+      cable.position.set(0, (ay + by) / 2, (az + bz) / 2);
+      cable.rotation.x = Math.atan2(bz - az, ay - by);
+      er.add(cable);
+    }
+    er.position.set(-160 * S, 0, -402 * S);
+    scene.add(er);
+  }
+
+  // Canadian Museum for Human Rights: limestone roots, glass cloud, spire
+  {
+    const cmhr = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0xcdbfa4, roughness: 0.85 });
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0xaed4e8, roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.75 });
+    for (let i = 0; i < 4; i++) {                       // the stone roots
+      const root = new THREE.Mesh(new THREE.BoxGeometry(7 + i * 2, 6 + i * 2.4, 8), stone);
+      root.position.set(-8 + i * 5.5, (6 + i * 2.4) / 2, (i % 2 ? 4 : -3));
+      root.rotation.y = i * 0.5;
+      root.castShadow = true;
+      cmhr.add(root);
+    }
+    const cloud = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 9), glass);
+    cloud.position.set(2, 12, 0);
+    cloud.scale.set(1.25, 0.95, 0.85);
+    cloud.castShadow = true;
+    cmhr.add(cloud);
+    const cloud2 = new THREE.Mesh(new THREE.SphereGeometry(8, 12, 9), glass);
+    cloud2.position.set(-7, 9, 2);
+    cloud2.scale.set(1.1, 0.8, 0.9);
+    cmhr.add(cloud2);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.4, 34, 8), glass);
+    spire.position.set(6, 24, 0);
+    spire.castShadow = true;
+    cmhr.add(spire);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.7, 6, 5),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 3.2, 3.4) }));
+    tip.position.set(6, 41.4, 0);
+    cmhr.add(tip);
+    cmhr.position.set(-135 * S, 0, -310 * S);           // dead ahead off the river bend
+    scene.add(cmhr);
+  }
+
+  // Manitoba Legislature with the gilded Golden Boy, beside the grid straight
+  {
+    const leg = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0xd8ccb2, roughness: 0.8 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(30, 8, 15), stone);
+    base.position.y = 4;
+    base.castShadow = true;
+    leg.add(base);
+    for (let c = 0; c < 6; c++) {                       // portico colonnade
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 7, 8), stone);
+      col.position.set(-7.5 + c * 3, 3.5, 7.9);
+      leg.add(col);
+    }
+    const ped = new THREE.Mesh(new THREE.BoxGeometry(9, 3.2, 9), stone);
+    ped.position.y = 9.6;
+    leg.add(ped);
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.6, 4.5, 12), stone);
+    drum.position.y = 13.4;
+    leg.add(drum);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(4.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x3f7a56, roughness: 0.5, metalness: 0.4 }));
+    dome.position.y = 15.6;
+    dome.castShadow = true;
+    leg.add(dome);
+    // the GOLDEN BOY — gilded, softly glowing so he reads from the track
+    const gold = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.9, 2.2, 0.5) });
+    const boy = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 2.0, 6), gold);
+    boy.position.y = 20.9;
+    leg.add(boy);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 6, 5), gold);
+    head.position.y = 22.1;
+    leg.add(head);
+    const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.5, 4), gold);
+    torch.position.set(0.5, 22.3, 0);
+    torch.rotation.z = -0.7;
+    leg.add(torch);
+    leg.position.set(34, 0, 40 * S);
+    leg.rotation.y = -Math.PI / 2;                      // portico faces the track
+    scene.add(leg);
+  }
+
+  // Forks Market tower + sheds at the confluence, inside the river bend
+  {
+    const forks = new THREE.Group();
+    const glass2 = new THREE.MeshStandardMaterial({
+      color: 0xb8d8d0, roughness: 0.2, metalness: 0.5 });
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(7, 17, 7), glass2);
+    tower.position.y = 8.5;
+    tower.castShadow = true;
+    forks.add(tower);
+    const pyr = new THREE.Mesh(new THREE.ConeGeometry(5.6, 4.2, 4),
+      new THREE.MeshStandardMaterial({ color: 0x3f6a52, roughness: 0.6 }));
+    pyr.position.y = 19.1;
+    pyr.rotation.y = Math.PI / 4;
+    forks.add(pyr);
+    for (const [sx, sz] of [[-13, 3], [12, -2]]) {      // market sheds
+      const shed = new THREE.Mesh(new THREE.BoxGeometry(12, 4.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0xa8886a, roughness: 0.85 }));
+      shed.position.set(sx, 2.25, sz);
+      shed.castShadow = true;
+      forks.add(shed);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(8.2, 2.4, 4),
+        new THREE.MeshStandardMaterial({ color: 0x6a4a32, roughness: 0.9 }));
+      roof.position.set(sx, 5.6, sz);
+      roof.rotation.y = Math.PI / 4;
+      roof.scale.z = 0.66;
+      forks.add(roof);
+    }
+    forks.position.set(-286 * S, 0, -300 * S);
+    scene.add(forks);
+  }
+
+  // Portage & Main office towers at the hard corner (kept off every road leg)
+  {
+    const dayWin = canvasTexture(64, 128, (g) => {
+      g.fillStyle = '#8fa3b4'; g.fillRect(0, 0, 64, 128);
+      g.fillStyle = '#42566a';
+      for (let y = 4; y < 124; y += 7)
+        for (let x = 4; x < 60; x += 6) g.fillRect(x, y, 3, 4);
+    });
+    const spots3 = [[-215, 370], [-268, 372], [-306, 330], [-312, 262], [-200, 300]];
+    spots3.forEach(([bx, bz], i) => {
+      const w = 13 + (i * 5) % 8, h = 26 + (i * 17) % 22;
+      const tw = new THREE.Mesh(new THREE.BoxGeometry(w, h, w),
+        new THREE.MeshBasicMaterial({ map: dayWin }));
+      tw.position.set(bx * S, h / 2 - 1, bz * S);
+      let clear = true;
+      for (let j = 0; j < N_SAMP; j += 12) {
+        const dx = PTS[j].x - tw.position.x, dz = PTS[j].z - tw.position.z;
+        if (dx * dx + dz * dz < (w / 2 + HALF_W + 5) ** 2) { clear = false; break; }
+      }
+      if (clear) scene.add(tw);
+    });
+  }
+
+  // grain elevators on the flat horizon
+  const elevWood = new THREE.MeshLambertMaterial({ color: 0x9a5f43, flatShading: true });
+  for (const [ex, ez] of [[520, 620], [780, -220], [300, -780], [-140, 820]]) {
+    const el = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(16, 34, 12), elevWood);
+    body.position.y = 17;
+    el.add(body);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(11, 7, 4), elevWood);
+    roof.position.y = 37.5;
+    roof.rotation.y = Math.PI / 4;
+    roof.scale.z = 0.75;
+    el.add(roof);
+    const cupola = new THREE.Mesh(new THREE.BoxGeometry(5, 7, 5), elevWood);
+    cupola.position.y = 42;
+    el.add(cupola);
+    el.position.set(ex, 0, ez);
+    scene.add(el);
+  }
+
+}
 {
   const fuji = new THREE.Group();
   const cone = new THREE.Mesh(
@@ -1110,8 +1346,8 @@ if (THEME === 'jungle') {
   fuji.position.set(-700, 0, 1900);
   if (THEME === 'fuji') scene.add(fuji);   // the volcano is Fuji-only
 
-  const mtNear = new THREE.Color(ENV.mt[0]), mtFar = new THREE.Color(ENV.mt[1]);
-  for (let i = 0; i < 12; i++) {
+  const mtNear = new THREE.Color(ENV.mt ? ENV.mt[0] : 0), mtFar = new THREE.Color(ENV.mt ? ENV.mt[1] : 0);
+  for (let i = 0; i < (ENV.mt ? 12 : 0); i++) {
     const a = i / 12 * Math.PI * 2 + 0.26;
     const r = 1350 + (i % 3) * 260;
     const mtMat = new THREE.MeshLambertMaterial({
@@ -1345,6 +1581,16 @@ let puddleMat = null;     // shared puddle material (shimmers)
     scene.add(m);
     hazards.push({ s, x: side, kind: 'sign' });
   });
+  // green highway-style KM milestone markers around the Winnipeg lap
+  if (THEME === 'peg') {
+    for (const [ms, label] of [[500, 'KM 1'], [1000, 'KM 2'], [1500, 'KM 3']]) {
+      const m = makeSignMesh(billboardTex(label, '#186428', '#fcfcfc'), 2.2, 1.3, 0.8);
+      posAt(ms, HALF_W + 2.6, m.position);
+      m.rotation.y = headingAt(ms) + Math.PI;
+      scene.add(m);
+      hazards.push({ s: ms, x: HALF_W + 2.6, kind: 'sign' });
+    }
+  }
   // puddles on straights
   // metalness < 1 keeps a blue tint at grazing angles — a perfect mirror
   // reflects the pale horizon from afar and camouflages into the road.
@@ -1563,6 +1809,31 @@ let puddleMat = null;     // shared puddle material (shimmers)
         blob.scale.y = 0.72;
         blob.castShadow = true;
         tree.add(blob);
+      }
+      posAt(s, side, tree.position);
+      scene.add(tree);
+    }
+  } else if (THEME === 'peg') {
+    // prairie elms: broad round crowns over the boulevard
+    const elmGreens = [0x2f7a33, 0x3c8a3c, 0x357f2e].map(
+      c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    for (let i = 0; i < 30; i++) {
+      const s = 180 + (i * 64.9) % (TRACK_LEN - 300);
+      const side = (i % 2 ? 1 : -1) * (HALF_W + 10 + (i * 7) % 12);
+      const tree = new THREE.Group();
+      const h = 5.5 + (i * 13) % 3;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, h * 0.6, 6), trunkMat);
+      trunk.position.y = h * 0.3;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      for (let b = 0; b < 2; b++) {
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(2.6 - b * 0.7, 8, 6),
+          elmGreens[(i + b) % 3]);
+        crown.position.set(Math.cos(i + b * 2.4) * 0.9, h * 0.62 + b * 1.5,
+          Math.sin(i + b * 2.4) * 0.9);
+        crown.scale.y = 0.85;
+        crown.castShadow = true;
+        tree.add(crown);
       }
       posAt(s, side, tree.position);
       scene.add(tree);
@@ -1975,7 +2246,7 @@ const GAME_TIME_RATE = 2;
 const QUAL_TIME = 90;
 /* operator "dip switch" settings, same ranges as the arcade cabinet */
 const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60],
-  track: ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle'] };
+  track: ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle', 'peg'] };
 const DIP = { laps: 3, time: 90, ext: 60, track: 'fuji' };
 try {
   const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');

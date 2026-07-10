@@ -67,6 +67,13 @@ and local sponsor boards:
   walled with snowbanks, chalets, icy patches instead of puddles.
 - **Jungle Rapids** — flowing rainforest esses, a riverside straight with a
   waterfall, layered canopy all around.
+- **Winnipeg** — a prairie street lap through the real landmark corridor:
+  the Legislature with the gilded Golden Boy on the grid straight, a hard
+  90 at Portage & Main under downtown towers, Exchange District esses, a
+  run along the Red River past the Esplanade Riel footbridge and the
+  Museum for Human Rights' glass cloud, and a sweeper around The Forks
+  where the two rivers meet. Canada/Manitoba flag boards, grain elevators
+  on a pancake-flat horizon, and km milestone markers.
 
 Plus a live minimap during play and a TV-style race replay (press R after
 a run) filmed from trackside cameras.
