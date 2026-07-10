@@ -1085,6 +1085,7 @@ if (THEME === 'jungle') {
       grad.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 64, 64);
+      flattenTexRGB(g, 64, 64, 255, 255, 255);
     });
     for (let i = 0; i < 4; i++) {
       const mist = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1156,6 +1157,7 @@ if (THEME === 'jungle') {
     grad.addColorStop(1, 'rgba(255,244,200,0)');
     g.fillStyle = grad;
     g.fillRect(0, 0, 128, 128);
+    flattenTexRGB(g, 128, 128, 255, 246, 210);
   });
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowTex, transparent: true, depthWrite: false, fog: false,
@@ -1173,6 +1175,7 @@ if (THEME === 'jungle') {
       g.fillStyle = grad;
       g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
     }
+    flattenTexRGB(g, 128, 64, 255, 255, 255);
   });
   for (let i = 0; i < (ENV.night ? 0 : 12); i++) {
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1183,6 +1186,19 @@ if (THEME === 'jungle') {
     spr.scale.set(300 + (i % 3) * 90, 120 + (i % 3) * 30, 1);
     scene.add(spr);
   }
+}
+
+/* Canvas 2D stores pixels premultiplied by alpha; the un-premultiply that
+   happens on texture upload amplifies per-channel rounding in low-alpha
+   pixels into random COLORED speckles (very visible on iOS GPUs). For any
+   soft-alpha texture with a constant tint, flatten RGB after drawing so
+   rounding noise stays monochrome and invisible. */
+function flattenTexRGB(g, w, h, r, gr, b) {
+  const d = g.getImageData(0, 0, w, h);
+  for (let i = 0; i < d.data.length; i += 4) {
+    d.data[i] = r; d.data[i + 1] = gr; d.data[i + 2] = b;
+  }
+  g.putImageData(d, 0, 0);
 }
 
 /* procedural sign textures (same pixel art as the classic version) */
@@ -1763,6 +1779,7 @@ const skidTex = canvasTexture(32, 64, (g) => {
   grad.addColorStop(1, 'rgba(16,16,16,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 32, 64);
+  flattenTexRGB(g, 32, 64, 16, 16, 16);
 });
 const puffTex = canvasTexture(64, 64, (g) => {
   const grad = g.createRadialGradient(32, 32, 3, 32, 32, 32);
@@ -1771,6 +1788,7 @@ const puffTex = canvasTexture(64, 64, (g) => {
   grad.addColorStop(1, 'rgba(200,200,200,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
+  flattenTexRGB(g, 64, 64, 210, 210, 210);
 });
 for (let i = 0; i < SKID_N; i++) {
   const m = new THREE.Mesh(
