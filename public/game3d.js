@@ -19,6 +19,8 @@ import { RenderPass } from './lib/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from './lib/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from './lib/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './lib/jsm/postprocessing/OutputPass.js';
+import { NET, SnapshotBuffer, saveResume, takeResume, guardReload,
+         clearReloadGuard } from './net.js?v=1';
 
 /* ---------------- canvases ---------------- */
 const HW = 256, HH = 224;              // HUD logical resolution
@@ -2439,6 +2441,221 @@ function setupRaceGrid() {
   REC.cars = G.cars.map(c => c.ci);
 }
 
+/* ---------------- two-player (online head-to-head) ----------------
+   The server relays; each client simulates its own car. The opponent
+   lives in G.cars as a remote-driven pseudo-car so rendering, minimap
+   and bump physics all apply to it unchanged. CPU cars are simulated
+   by the host and dead-reckoned on the guest. */
+const MP = {
+  active: false, role: null, code: null, token: null,
+  config: { track: 'fuji', laps: 3, cpus: 5 },
+  peerPresent: false, peerBuf: null, peerCar: null,
+  goLocal: 0, raceT: 0, seq: 0, awaitResult: false,
+  result: null, lobbySel: 0,
+};
+function is2P() { return MP.active; }
+const MP_ROWS = [
+  ['TRACK', 'track'], ['CPU CARS', 'cpus'], ['LAPS', 'laps'],
+  ['SHARE LINK', null], ['START RACE', null]
+];
+const MP_CHOICES = { track: DIP_CHOICES.track,
+  laps: [1, 2, 3, 4, 5, 6], cpus: [0, 1, 2, 3, 4, 5, 6, 7] };
+
+function enter2P() {
+  if (MP.active) return;
+  G.demo = false;
+  AudioFX.engine(false, 0);
+  MP.active = true;
+  MP.role = 'host';
+  MP.code = null; MP.token = null; MP.peerPresent = false;
+  MP.config = { track: TRACK_ID, laps: DIP.laps, cpus: 5 };
+  MP.lobbySel = 0;
+  setState('lobby');
+  NET.connect()
+    .then(() => NET.send({ t: 'create', config: MP.config }))
+    .catch(() => mpLeave('CONNECTION FAILED'));
+}
+
+function mpGuestBoot(code) {
+  MP.active = true;
+  MP.role = 'guest';
+  MP.code = code; MP.token = null;
+  G.demo = false;
+  AudioFX.engine(false, 0);
+  setState('joinWait');
+  NET.connect()
+    .then(() => NET.send({ t: 'probe', code }))
+    .catch(() => mpLeave('CONNECTION FAILED'));
+}
+
+function mpLeave(msg) {
+  if (MP.active && NET.connected()) NET.send({ t: 'leave' });
+  NET.close();
+  MP.active = false; MP.role = null; MP.code = null; MP.token = null;
+  MP.peerPresent = false; MP.peerBuf = null; MP.peerCar = null;
+  MP.goLocal = 0; MP.awaitResult = false; MP.result = null;
+  RACE_LAPS = DIP.laps;
+  if (location.search.indexOf('join') >= 0)
+    history.replaceState(null, '', location.pathname);
+  initGame();
+  if (msg) flash(msg, 2.5);
+}
+
+function mpShareLink() {
+  const url = location.origin + '/?join=' + MP.code;
+  const copied = () => flash('LINK COPIED', 1.6);
+  if (navigator.share) {
+    navigator.share({ title: 'Pole Position 3D',
+      text: 'Race me in Pole Position 3D!', url }).catch(() => {});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(copied, () => mpLegacyCopy(url, copied));
+  } else mpLegacyCopy(url, copied);
+}
+function mpLegacyCopy(text, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    done();
+  } catch (e) {}
+}
+
+function mpLobbyInput(k) {
+  if (k === 'arrowup') MP.lobbySel = (MP.lobbySel + MP_ROWS.length - 1) % MP_ROWS.length;
+  else if (k === 'arrowdown') MP.lobbySel = (MP.lobbySel + 1) % MP_ROWS.length;
+  else if (k === 'arrowleft' || k === 'arrowright') {
+    const key = MP_ROWS[MP.lobbySel][1];
+    if (!key) return;
+    const list = MP_CHOICES[key];
+    const dir = k === 'arrowright' ? 1 : -1;
+    MP.config[key] = list[(list.indexOf(MP.config[key]) + dir + list.length) % list.length];
+    NET.send({ t: 'config', config: MP.config });
+    AudioFX.beep(660, 0.03, 0.08);
+  }
+}
+function mpLobbyEnter() {
+  const row = MP_ROWS[MP.lobbySel][0];
+  if (row === 'SHARE LINK') mpShareLink();
+  else if (row === 'START RACE') mpRequestStart();
+  else mpLobbyInput('arrowright');
+}
+function mpRequestStart() {
+  if (!MP.peerPresent) { flash('NO PLAYER 2 YET', 1.6); return; }
+  NET.send({ t: 'start_req' });
+}
+function mpClearField() {
+  for (const c of G.cars) scene.remove(c.mesh);
+  G.cars = [];
+  MP.peerCar = null;
+  MP.peerBuf = null;
+  G.speed = 0;
+}
+function mpResultEnter() {
+  if (MP.role !== 'host') return;
+  NET.send({ t: 'again' });
+  MP.goLocal = 0;
+  mpClearField();
+  setState('lobby');
+}
+
+/* both clients run this on `prep` (and after a resume that lands in
+   `starting`): make sure the loaded world matches the room's track —
+   reloading if not — then grid up and report ready */
+function mpOnPrep(config) {
+  MP.config = config;
+  if (config.track !== TRACK_ID) { mpReloadForTrack(config.track, true); return; }
+  clearReloadGuard();
+  RACE_LAPS = config.laps;
+  MP.goLocal = 0;
+  setState('mpPrep');
+  mpSetupGrid();
+  NET.send({ t: 'ready_race' });
+}
+
+/* switch the world to `track` via a reload. withResume: keep our seat
+   through the reload (post-join); without, the ?join= URL re-enters. */
+function mpReloadForTrack(track, withResume) {
+  if (!guardReload(track)) {   // second reload for the same target: storage is blocked
+    mpLeave('STORAGE BLOCKED - CANNOT SWITCH TRACK');
+    return;
+  }
+  try {
+    const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
+    d.track = track;
+    localStorage.setItem('pp_dip', JSON.stringify(d));
+  } catch (e) {
+    mpLeave('STORAGE BLOCKED - CANNOT SWITCH TRACK');
+    return;
+  }
+  if (withResume)
+    saveResume({ code: MP.code, token: MP.token, role: MP.role, track });
+  location.reload();
+}
+
+function mpSetupGrid() {
+  for (const c of G.cars) scene.remove(c.mesh);
+  G.cars = [];
+  clearReplayPool();
+  G.score = 0; G.lap = 1; G.lapTime = 0; G.passed = 0; G.timer = 999;
+  MP.raceT = 0; MP.seq = 0; MP.awaitResult = false; MP.result = null;
+  MP.peerBuf = new SnapshotBuffer(TRACK_LEN);
+  const total = 2 + MP.config.cpus;
+  const slots = [];
+  for (let k = 0; k < total; k++)
+    slots.push({ s: TRACK_LEN - (k * 9 + 7), off: k % 2 ? 2.2 : -2.2 });
+  const mySlot = MP.role === 'host' ? 0 : 1;
+  const peerSlot = 1 - mySlot;
+  G.pos = wrapS(slots[mySlot].s);
+  G.playerX = slots[mySlot].off;
+  // the opponent: same body as the local car, blue/white livery
+  const peer = {
+    s: wrapS(slots[peerSlot].s), offset: slots[peerSlot].off, speed: 0,
+    maxPct: 0, mesh: buildF1(0x0058f8, 0xfcfcfc), ahead: false, rival: true,
+    remote: true, ci: 2, phase: 0, lap: 1, steer: 0, crashed: 0,
+  };
+  scene.add(peer.mesh);
+  G.cars.push(peer);
+  MP.peerCar = peer;
+  for (let k = 2; k < total; k++)
+    G.cars.push(makeCar(wrapS(slots[k].s), slots[k].off,
+      0.60 + 0.025 * (total - 1 - k), k - 2, true));
+  for (const c of G.cars) c.ahead = carAhead(c);
+  G.speed = 0; G.gear = 0; G.crashed = 0; G.steer = 0; G.invuln = 0;
+  G.lapArmed = false;
+  REC.data = [];
+  REC.cars = G.cars.map(c => c.ci);
+}
+
+function mpSendState() {
+  NET.send({ t: 'state', n: MP.seq++,
+    s: Math.round(G.pos * 10) / 10,
+    x: Math.round(G.playerX * 100) / 100,
+    v: Math.round(G.speed * 10) / 10,
+    st: G.steer,
+    cr: Math.round(Math.max(0, G.crashed) * 10) / 10,
+    lap: G.lap });
+}
+function mpSendCars() {
+  NET.send({ t: 'cars', n: MP.seq++,
+    a: G.cars.filter(c => !c.remote).map(c => [
+      Math.round(c.s * 10) / 10,
+      Math.round(c.offset * 100) / 100,
+      Math.round(c.speed * 10) / 10]) });
+}
+
+/* my current race position vs the opponent (for the HUD) */
+function mpPos() {
+  const p = MP.peerCar;
+  if (!p) return 1;
+  if (p.lap !== G.lap) return p.lap > G.lap ? 2 : 1;
+  return carAhead(p) ? 2 : 1;
+}
+
 /* ---------------- input ---------------- */
 const keys = {};
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -2494,6 +2711,21 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
+  if (G.state === 'lobby') {             // two-player host setup
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) mpLobbyInput(k);
+    else if (e.key === 'Enter') mpLobbyEnter();
+    else if (e.key === 'Escape' || k === 'o') mpLeave();
+    return;
+  }
+  if (G.state === 'joinWait' || G.state === 'mpPrep') {
+    if (e.key === 'Escape' || k === 'o') mpLeave();
+    return;
+  }
+  if (G.state === 'mpResult') {
+    if (e.key === 'Enter') mpResultEnter();
+    else if (e.key === 'Escape' || k === 'o') mpLeave();
+    return;
+  }
   if (G.state === 'initials') {          // arcade initials entry
     if (k === 'arrowleft') cycleInitial(-1);
     else if (k === 'arrowright') cycleInitial(1);
@@ -2511,10 +2743,15 @@ window.addEventListener('keydown', (e) => {
     if (AudioFX.muted && AudioFX.engineGain) AudioFX.engineGain.gain.value = 0;
   }
   if (k === 'p' || e.key === 'Escape') {
-    if (['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
+    // no pausing online: the other player's race keeps running
+    if (['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state) && !is2P()) {
       G.paused = !G.paused;
       if (G.paused) AudioFX.engine(false, 0);
     }
+  }
+  if (k === '2' && (G.state === 'title' || G.state === 'scores')) {
+    enter2P();
+    return;
   }
   if (k === 'r') {
     if (G.state === 'replay') { exitReplay(); return; }
@@ -2720,23 +2957,45 @@ function updateDriving(dt, racing) {
 }
 
 function updateCars(dt) {
+  const guest = is2P() && MP.role === 'guest';
   for (const c of G.cars) {
-    const kAhead = Math.abs(kappaAt(c.s + c.speed * 0.9));
-    const safe = 1 - Math.min(0.55, kAhead * (c.rival ? 14 : 22));
-    // per-car personality: gentle pace surges and lane sway
-    const surge = 1 + 0.04 * Math.sin(frame * 0.007 + c.phase);
-    const target = MAX_SPEED * c.maxPct * safe * surge;
-    c.speed += Math.min(1, dt * 0.5) * (target - c.speed);
-    c.s = wrapS(c.s + c.speed * dt);
-    // drift toward the inside of the corner, plus a slow sway
-    const k = kappaAt(c.s);
-    const sway = Math.sin(frame * 0.004 + c.phase * 2.3) * 0.9;
-    const want = Math.max(-3.4, Math.min(3.4,
-      sway + c.offset + (k > 0.004 ? 0.5 : k < -0.004 ? -0.5 : 0)));
-    c.offset += (want - c.offset) * Math.min(1, dt * 0.6);
+    if (c.remote) {
+      // the opponent: replay their state stream ~100ms in the past
+      const snap = MP.peerBuf && MP.peerBuf.sampleAt(performance.now() - 100);
+      if (snap) {
+        c.s = snap.s; c.offset = snap.x; c.speed = snap.v;
+        c.steer = snap.st; c.crashed = snap.cr; c.lap = snap.lap;
+      }
+    } else if (guest) {
+      // host owns the CPU cars: dead-reckon between its 10 Hz snapshots
+      // and bleed the positional error in over ~100ms so nothing pops
+      c.s = wrapS(c.s + c.speed * dt);
+      if (c.sErr) {
+        const f = Math.min(1, dt * 10);
+        c.s = wrapS(c.s + c.sErr * f);
+        c.sErr *= 1 - f;
+        if (Math.abs(c.sErr) < 0.01) c.sErr = 0;
+      }
+      if (c.offTarget !== undefined)
+        c.offset += (c.offTarget - c.offset) * Math.min(1, dt * 0.6);
+    } else {
+      const kAhead = Math.abs(kappaAt(c.s + c.speed * 0.9));
+      const safe = 1 - Math.min(0.55, kAhead * (c.rival ? 14 : 22));
+      // per-car personality: gentle pace surges and lane sway
+      const surge = 1 + 0.04 * Math.sin(frame * 0.007 + c.phase);
+      const target = MAX_SPEED * c.maxPct * safe * surge;
+      c.speed += Math.min(1, dt * 0.5) * (target - c.speed);
+      c.s = wrapS(c.s + c.speed * dt);
+      // drift toward the inside of the corner, plus a slow sway
+      const k = kappaAt(c.s);
+      const sway = Math.sin(frame * 0.004 + c.phase * 2.3) * 0.9;
+      const want = Math.max(-3.4, Math.min(3.4,
+        sway + c.offset + (k > 0.004 ? 0.5 : k < -0.004 ? -0.5 : 0)));
+      c.offset += (want - c.offset) * Math.min(1, dt * 0.6);
+    }
 
     const nowAhead = carAhead(c);
-    if (c.ahead && !nowAhead && G.crashed <= 0) {
+    if (c.ahead && !nowAhead && G.crashed <= 0 && !c.remote) {
       G.passed++;
       AudioFX.beep(880, 0.05, 0.08);
       if (Math.abs(c.offset - G.playerX) < 4.5) AudioFX.whoosh();
@@ -2744,9 +3003,11 @@ function updateCars(dt) {
     c.ahead = nowAhead;
 
     // car-to-car contact trades paint instead of exploding: displacement
-    // resolves the overlap every frame, the thud/shake fires once per touch
+    // resolves the overlap every frame, the thud/shake fires once per touch.
+    // For the remote opponent only the LOCAL car is displaced — their side
+    // runs the mirrored code, and their state stream stays authoritative.
     if (c.bumpT > 0) c.bumpT -= dt;
-    if (G.crashed <= 0) {
+    if (G.crashed <= 0 && !(c.remote && c.crashed > 0)) {
       const dz = (c.s - G.pos + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
       const dx = c.offset - G.playerX;
       if (dz > -4.8 && dz < 4.8 && Math.abs(dx) < 2.0) {
@@ -2755,20 +3016,26 @@ function updateCars(dt) {
           // side-by-side: shove both cars apart, scrub some speed
           const push = 2.0 - Math.abs(dx);
           G.playerX -= side * push * 0.75;
-          c.offset = Math.max(-4.2, Math.min(4.2, c.offset + side * push * 0.55));
+          if (!c.remote) {
+            c.offset = Math.max(-4.2, Math.min(4.2, c.offset + side * push * 0.55));
+            c.speed *= 1 - 0.6 * dt;
+          }
           G.speed *= 1 - 1.2 * dt;
-          c.speed *= 1 - 0.6 * dt;
         } else if (dz > 0) {
           // player rear-ends the car ahead: match its pace, shunt it on
           G.speed = Math.min(G.speed, c.speed * 0.92);
-          c.speed = Math.min(MAX_SPEED, c.speed + 4);
-          c.s = wrapS(c.s + (4.8 - dz) * 0.6);
+          if (!c.remote) {
+            c.speed = Math.min(MAX_SPEED, c.speed + 4);
+            c.s = wrapS(c.s + (4.8 - dz) * 0.6);
+          }
           G.playerX -= side * 0.5;
         } else {
           // rival rear-ends the player: a forward shunt, rival checks up
           G.speed = Math.min(MAX_SPEED, G.speed + 3);
-          c.speed *= 0.85;
-          c.s = wrapS(c.s - (4.8 + dz) * 0.6);
+          if (!c.remote) {
+            c.speed *= 0.85;
+            c.s = wrapS(c.s - (4.8 + dz) * 0.6);
+          }
         }
         if (!(c.bumpT > 0)) {
           c.bumpT = 0.35;
@@ -2824,6 +3091,25 @@ function update(dt) {
 
     case 'initials':
     case 'options':
+    case 'lobby':
+    case 'joinWait':
+      break;
+
+    case 'mpPrep':
+      // both seats are gridded; the server's go-time drives the lights
+      if (MP.goLocal && Date.now() >= MP.goLocal - 2400) {
+        setState('lightsR');
+        speak('Prepare to race');
+      } else if (G.stateT > 50) {
+        mpLeave('SYNC TIMEOUT');
+      }
+      break;
+
+    case 'mpResult':
+      G.speed = Math.max(0, G.speed - MAX_SPEED * dt * 0.4);
+      G.pos = wrapS(G.pos + G.speed * dt);
+      AudioFX.engine(G.speed > 1, G.speed / MAX_SPEED);
+      if (is2P()) updateCars(dt);   // let the field roll behind the overlay
       break;
 
     case 'replay':
@@ -2895,33 +3181,46 @@ function update(dt) {
       break;
 
     case 'race': {
-      G.timer -= dt * GAME_TIME_RATE;
+      if (!is2P()) G.timer -= dt * GAME_TIME_RATE;   // no clock head-to-head
       G.lapTime += dt * GAME_TIME_RATE;
+      if (is2P()) MP.raceT += dt;
+      if (G.demo) demoInput();                       // test-hook autopilot
       recordFrame();
       const crossed = updateDriving(dt, true);
-      if (crossed) {
+      if (crossed && !MP.awaitResult) {
         if (!G.lapArmed) {
           G.lapArmed = true;
           G.lapTime = 0;
         } else if (G.lap >= RACE_LAPS) {
           noteLap(G.lapTime);
-          finishRace();
-          break;
+          if (is2P()) {
+            // report the finish; the server names the winner
+            MP.awaitResult = true;
+            NET.send({ t: 'finished', time: MP.raceT });
+            flash('FINISHED!', 2.5);
+            AudioFX.goal();
+          } else {
+            finishRace();
+            break;
+          }
         } else {
           noteLap(G.lapTime);
           G.lap++;
           G.lapTime = 0;
-          G.timer += EXT_TIME;
+          if (!is2P()) G.timer += EXT_TIME;
           if (G.lap === RACE_LAPS) {
             flash('FINAL LAP!', 2);
             speak('Final lap');
-          } else {
+          } else if (!is2P()) {
             flash('EXTENDED PLAY!', 1.6);
           }
           AudioFX.extend();
         }
       }
-      if (G.timer <= 0) {
+      if (is2P()) {
+        if (frame % 3 === 0) mpSendState();
+        if (MP.role === 'host' && frame % 6 === 0) mpSendCars();
+      } else if (G.timer <= 0) {
         G.timer = 0;
         AudioFX.engine(false, 0);
         setState('timeUp');
@@ -2981,7 +3280,8 @@ const _eye = new THREE.Vector3(), _look = new THREE.Vector3();
 let viewX = 0;
 function updateView() {
   const driving = ['qualify', 'race', 'finish', 'timeUp', 'lightsQ', 'lightsR',
-    'qualDone', 'qualFail'].includes(G.state) || (G.state === 'title' && G.demo);
+    'qualDone', 'qualFail', 'mpPrep', 'mpResult'].includes(G.state) ||
+    (G.state === 'title' && G.demo);
 
   // checkered flags waggle on the final lap
   const finalLap = (G.state === 'race' || G.state === 'finish') && G.lap === RACE_LAPS;
@@ -3028,7 +3328,9 @@ function updateView() {
   // rivals
   for (const c of G.cars) {
     posAt(c.s, c.offset, c.mesh.position);
-    c.mesh.rotation.y = headingAt(c.s);
+    c.mesh.rotation.y = headingAt(c.s) -
+      (c.remote ? (c.steer || 0) * 0.14 : 0);   // opponent's visual steer lean
+    if (c.remote) c.mesh.visible = !(c.crashed > 0);
     for (const w of c.mesh.userData.wheels)
       w.m.rotation.x -= (c.speed / w.r) * 0.0167;
   }
@@ -3125,13 +3427,13 @@ function renderHUD() {
   ctx.fillRect(0, 0, HW, 20);
   drawText('TOP', 6, 2, C.hudRed);
   drawText(String(Math.floor(topScore)), 32, 2, C.hudWhite);
-  drawText('TIME', 100, 2, C.hudYel);
+  drawText(is2P() ? 'POS' : 'TIME', 100, 2, C.hudYel);
   ctx.fillStyle = C.hudBlue;
   ctx.fillRect(168, 0, 88, 10);
-  const inRace = ['qualify', 'race', 'finish', 'timeUp'].includes(G.state);
+  const inRace = ['qualify', 'race', 'finish', 'timeUp', 'mpResult'].includes(G.state);
   drawText('LAP', 174, 2, C.hudWhite);
   drawText(inRace ? fmtLap(G.lapTime) : '0"00', 200, 2, C.hudWhite);
-  if (G.state === 'race' || G.state === 'finish')
+  if (['race', 'finish', 'mpResult'].includes(G.state))
     drawText(G.lap + '/' + RACE_LAPS, 232, 11, C.hudCyan);
   else if (G.state === 'qualify')
     drawText('QUAL', 232, 11, C.hudCyan);
@@ -3139,9 +3441,16 @@ function renderHUD() {
     drawText('B ' + fmtLap(G.bestLap), HW - 74, HH - 10, C.hudWhite);
   drawText('SCORE', 6, 11, C.hudYel);
   drawText(String(Math.floor(G.score / 10) * 10), 42, 11, C.hudWhite);
-  const showTimer = ['qualify', 'race', 'lightsQ', 'lightsR', 'finish', 'timeUp'].includes(G.state);
-  drawText(showTimer ? String(Math.max(0, Math.ceil(G.timer))) : '', 106, 11,
-    G.timer < 15 && (frame % 20 < 10) ? C.hudRed : C.hudWhite);
+  if (is2P()) {
+    // head-to-head has no clock: show live race position instead
+    const p = mpPos();
+    if (['race', 'lightsR', 'mpPrep', 'mpResult'].includes(G.state))
+      drawText(p + '/2', 106, 11, p === 1 ? C.hudYel : C.hudWhite);
+  } else {
+    const showTimer = ['qualify', 'race', 'lightsQ', 'lightsR', 'finish', 'timeUp'].includes(G.state);
+    drawText(showTimer ? String(Math.max(0, Math.ceil(G.timer))) : '', 106, 11,
+      G.timer < 15 && (frame % 20 < 10) ? C.hudRed : C.hudWhite);
+  }
   const kmh = Math.round(G.speed / MAX_SPEED * 315);
   drawText('SPEED', 128, 11, C.hudYel);
   drawText(String(kmh) + 'KM', 166, 11, C.hudWhite);
@@ -3185,8 +3494,68 @@ function renderStateOverlays() {
       drawTextC('TOP SCORE ' + topScore, 108, C.hudYel);
       if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
       if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 136, C.hudWhite);
-      drawTextC('QUALIFY IN UNDER 73"00', 158, C.hudCyan);
-      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS  - O OPTIONS', 170, C.hudCyan);
+      drawTextC(COARSE ? '2 PLAYER - TAP HERE' : '2 PLAYER - PRESS 2', 148, C.hudYel);
+      drawTextC('QUALIFY IN UNDER 73"00', 160, C.hudCyan);
+      drawTextC('THEN RACE ' + RACE_LAPS + ' LAPS  - O OPTIONS', 172, C.hudCyan);
+      break;
+    }
+    case 'lobby': {
+      shade(36, 150);
+      drawTextC('2 PLAYER SETUP', 42, C.hudRed, 2);
+      if (!MP.code) {
+        if (frame % 30 < 20) drawTextC('CONNECTING...', 104, C.hudWhite);
+        break;
+      }
+      drawTextC('ROOM CODE ' + MP.code, 62, C.hudYel);
+      MP_ROWS.forEach(([label, key], i) => {
+        const y = 82 + i * 15;
+        const sel = i === MP.lobbySel;
+        drawText((sel ? '>' : ' ') + label, 40, y, sel ? C.hudYel : C.hudWhite);
+        if (key) {
+          const val = key === 'track' ? TRACKS[MP.config.track].name
+            : String(MP.config[key]);
+          drawText(val, 214 - textW(val), y, sel ? C.hudYel : C.hudCyan);
+        }
+      });
+      // the arcade font has no '?'/'=' glyphs, so never print the raw URL
+      drawTextC('SHARE THE LINK TO INVITE A FRIEND', 160, C.hudCyan);
+      drawTextC(MP.peerPresent ? 'PLAYER 2 CONNECTED' : 'WAITING FOR PLAYER 2...',
+        172, MP.peerPresent ? '#00d800' : C.hudWhite);
+      break;
+    }
+    case 'joinWait': {
+      shade(52, 122);
+      drawTextC('2 PLAYER RACE', 58, C.hudRed, 2);
+      if (!MP.token) {
+        if (frame % 30 < 20) drawTextC('JOINING ' + (MP.code || '') + '...', 104, C.hudWhite);
+        drawTextC(COARSE ? 'OPT EXIT' : 'ESC EXIT', 162, C.hudCyan);
+        break;
+      }
+      drawTextC('ROOM ' + MP.code, 82, C.hudYel);
+      drawTextC(TRACKS[MP.config.track] ? TRACKS[MP.config.track].name : '', 100, C.hudWhite);
+      drawTextC(MP.config.laps + ' LAPS - ' + MP.config.cpus + ' CPU CARS', 114, C.hudCyan);
+      if (frame % 40 < 26) drawTextC('WAITING FOR HOST', 140, C.hudWhite);
+      drawTextC(COARSE ? 'OPT EXIT' : 'ESC EXIT', 162, C.hudCyan);
+      break;
+    }
+    case 'mpPrep': {
+      shade(90, 42);
+      drawTextC('GET READY', 96, C.hudYel, 2);
+      if (frame % 30 < 20) drawTextC('SYNCING...', 118, C.hudWhite);
+      break;
+    }
+    case 'mpResult': {
+      const win = MP.result && MP.result.win;
+      shade(76, 96);
+      drawTextC(win ? 'YOU WIN!' : 'YOU LOSE', 84, win ? C.hudYel : C.hudRed, 2);
+      if (MP.result && MP.result.forfeit)
+        drawTextC('OPPONENT LEFT THE RACE', 108, C.hudWhite);
+      else if (MP.result && MP.result.time != null)
+        drawTextC('WINNER TIME ' + fmtLap(MP.result.time), 108, C.hudWhite);
+      drawTextC(MP.role === 'host'
+        ? (COARSE ? 'TAP FOR REMATCH' : 'ENTER REMATCH')
+        : 'HOST PICKS REMATCH', 132, C.hudCyan);
+      drawTextC(COARSE ? 'OPT EXIT' : 'ESC EXIT', 146, C.hudCyan);
       break;
     }
     case 'scores': {
@@ -3299,7 +3668,8 @@ function renderMinimap(row) {
     for (let i = 3; i + 1 < row.length; i += 2) dot(row[i], row[i + 1], '#3cbcfc', 2);
     dot(row[0], row[1], '#f83800', 3);
   } else {
-    for (const c of G.cars) dot(c.s, c.offset, '#3cbcfc', 2);
+    for (const c of G.cars)
+      dot(c.s, c.offset, c.remote ? '#f8b800' : '#3cbcfc', c.remote ? 3 : 2);
     dot(G.pos, G.playerX, '#f83800', 3);
   }
 }
@@ -3329,7 +3699,7 @@ function renderHud2D() {
     }
   }
   renderHUD();
-  if (['qualify', 'race', 'finish', 'timeUp'].includes(G.state)) renderMinimap();
+  if (['qualify', 'race', 'finish', 'timeUp', 'mpResult'].includes(G.state)) renderMinimap();
   renderLights();
   renderBanner();
   renderStateOverlays();
@@ -3347,6 +3717,7 @@ function loop(now) {
   let dt = (now - last) / 1000;
   last = now;
   if (dt > 0.1) dt = 0.1;
+  if (dt < 0) dt = 0;   // first RAF timestamp can lag the module-eval clock
   acc += dt;
   while (acc >= STEP) { if (!G.paused) update(STEP); acc -= STEP; }
   updateView();
@@ -3361,7 +3732,7 @@ window.__ppInput = (k, down, pt) => {
   if (AudioFX.ctx && AudioFX.ctx.state === 'suspended') AudioFX.ctx.resume();
   if (k === 'gear') { if (down) toggleGear(); return; }
   if (k === 'pause') {
-    if (down && ['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state)) {
+    if (down && ['qualify', 'race', 'lightsQ', 'lightsR'].includes(G.state) && !is2P()) {
       G.paused = !G.paused;
       if (G.paused) AudioFX.engine(false, 0);
     }
@@ -3369,6 +3740,8 @@ window.__ppInput = (k, down, pt) => {
   }
   if (k === 'o') {
     if (down) {
+      // in any 2P screen the OPT button is the back/exit key
+      if (['lobby', 'joinWait', 'mpPrep', 'mpResult'].includes(G.state)) { mpLeave(); return; }
       if (G.state === 'options') { applyDip(); setState('title'); }
       else if (G.state === 'title' || G.state === 'scores') {
         G.demo = false;
@@ -3387,7 +3760,20 @@ window.__ppInput = (k, down, pt) => {
             Math.round((pt.y - 82) / 15)));
           optionsInput(pt.x < HW / 2 ? 'arrowleft' : 'arrowright');
         } else if (pt.y >= 142) { applyDip(); setState('title'); }
-      } else if (G.state === 'title' || G.state === 'scores') startGame();
+      } else if (G.state === 'lobby' && pt) {
+        if (pt.y >= 75 && pt.y < 155) {  // same row geometry as options
+          MP.lobbySel = Math.max(0, Math.min(MP_ROWS.length - 1,
+            Math.round((pt.y - 82) / 15)));
+          const key = MP_ROWS[MP.lobbySel][1];
+          if (key) mpLobbyInput(pt.x < HW / 2 ? 'arrowleft' : 'arrowright');
+          else mpLobbyEnter();           // SHARE LINK / START RACE rows
+        }
+      } else if (G.state === 'mpResult') mpResultEnter();
+      else if (G.state === 'title' || G.state === 'scores') {
+        // the "2 PLAYER - TAP HERE" line on the title card
+        if (G.state === 'title' && pt && pt.y >= 144 && pt.y < 157) enter2P();
+        else startGame();
+      }
       else if (G.state === 'gameOver') leaveGameOver(true);
       else if (G.state === 'initials') confirmInitial();
     }
@@ -3399,6 +3785,8 @@ window.__ppInput = (k, down, pt) => {
       else if (G.state === 'gameOver') leaveGameOver(true);
       else if (G.state === 'initials') confirmInitial();
       else if (G.state === 'options') { applyDip(); setState('title'); }  // like keyboard Enter
+      else if (G.state === 'lobby') mpRequestStart();   // START button = go
+      else if (G.state === 'mpResult') mpResultEnter();
     }
     return;
   }
@@ -3410,11 +3798,126 @@ window.__ppInput = (k, down, pt) => {
   keys[k] = down;
 };
 
+/* ---------------- two-player: server events + boot ---------------- */
+NET.on('created', (m) => {          // host: room is open
+  MP.code = m.code; MP.token = m.token; MP.config = m.config;
+});
+NET.on('peer_joined', () => {
+  MP.peerPresent = true;
+  AudioFX.beep(880, 0.08, 0.15);
+});
+NET.on('room_info', (m) => {        // guest: probe reply, before taking the seat
+  if (!MP.active || MP.role !== 'guest' || MP.token) return;
+  if (m.config.track !== TRACK_ID) { mpReloadForTrack(m.config.track, false); return; }
+  clearReloadGuard();
+  NET.send({ t: 'join', code: MP.code });
+});
+NET.on('joined', (m) => {           // guest: seat taken
+  MP.token = m.token; MP.config = m.config;
+});
+NET.on('join_error', (m) => {
+  mpLeave(m.reason === 'full' ? 'ROOM FULL'
+    : m.reason === 'in_progress' ? 'RACE IN PROGRESS' : 'ROOM NOT FOUND');
+});
+NET.on('config', (m) => {           // host's lobby edits / rematch reset
+  MP.config = m.config;
+  if (G.state === 'mpResult' && MP.role === 'guest') {
+    mpClearField();
+    setState('joinWait');
+  }
+});
+NET.on('prep', (m) => mpOnPrep(m.config));
+NET.on('resumed', (m) => {          // seat reclaimed after a track-change reload
+  if (m.phase === 'starting') mpOnPrep(m.config);
+  else {
+    MP.config = m.config;
+    setState(MP.role === 'host' ? 'lobby' : 'joinWait');
+  }
+});
+NET.on('go', (m) => { MP.goLocal = NET.toLocal(m.goAt); });
+NET.on('peer', (m) => {
+  if (MP.peerBuf)
+    MP.peerBuf.push({ n: m.n, tArr: performance.now(), s: m.s, x: m.x,
+                      v: m.v, st: m.st, cr: m.cr, lap: m.lap });
+});
+NET.on('cars', (m) => {
+  if (!is2P() || MP.role !== 'guest' || !Array.isArray(m.a)) return;
+  const locals = G.cars.filter(c => !c.remote);
+  for (let i = 0; i < locals.length && i < m.a.length; i++) {
+    const [s, off, v] = m.a[i];
+    const c = locals[i];
+    c.speed = v;
+    c.offTarget = off;
+    // fresh error vs our dead-reckoned position; updateCars bleeds it in
+    c.sErr = (s - c.s + TRACK_LEN * 1.5) % TRACK_LEN - TRACK_LEN / 2;
+  }
+});
+NET.on('result', (m) => {
+  if (!is2P()) return;
+  MP.result = { win: m.winner === MP.role, time: m.time, forfeit: m.forfeit };
+  AudioFX.engine(false, 0);
+  if (MP.result.win) { AudioFX.goal(); AudioFX.cheer(); speak('Congratulations'); }
+  else AudioFX.fail();
+  setState('mpResult');
+});
+NET.on('peer_left', (m) => {
+  if (!is2P()) return;
+  MP.peerPresent = false;
+  if (m.phase === 'racing') flash('OPPONENT DISCONNECTED', 2.5);   // result follows
+  else {
+    flash('PLAYER 2 LEFT', 2);
+    if (MP.role === 'host' && G.state === 'mpPrep') setState('lobby');
+  }
+});
+NET.on('room_closed', (m) => {
+  if (!is2P()) return;
+  mpLeave(m.reason === 'host_left' ? 'HOST LEFT' : 'ROOM CLOSED');
+});
+NET.on('error', (m) => {
+  if (m.code === 'no_guest') flash('NO PLAYER 2 YET', 1.6);
+});
+NET.on('_closed', () => {           // transport died out from under us
+  if (is2P()) mpLeave('CONNECTION LOST');
+});
+
+// boot: a resume record (mid-start track reload) outranks a ?join= link
+(function mpBoot() {
+  const rec = takeResume();
+  if (rec && rec.code && rec.token) {
+    MP.active = true;
+    MP.role = rec.role;
+    MP.code = rec.code;
+    MP.token = rec.token;
+    MP.peerPresent = true;          // we were mid-start; corrected by events if not
+    G.demo = false;
+    setState(rec.role === 'host' ? 'lobby' : 'joinWait');
+    NET.connect()
+      .then(() => NET.send({ t: 'resume', code: rec.code, token: rec.token, role: rec.role }))
+      .catch(() => mpLeave('CONNECTION FAILED'));
+    return;
+  }
+  const code = new URLSearchParams(location.search).get('join');
+  if (code && /^[A-Za-z0-9]{4,8}$/.test(code)) mpGuestBoot(code.toUpperCase());
+})();
+
 /* debug hooks for automated testing */
 window.__pp = {
   get G() { return G; },
+  get frame() { return frame; },
+  get acc() { return acc; },
+  get lastT() { return last; },
   keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED, scene, camera, renderer,
   setState, setupRaceGrid, flash, REC,
+  mp: {
+    enter2P,
+    get MP() { return MP; },
+    code: () => MP.code,
+    forceStart: () => mpRequestStart(),
+    lobbySet: (key, val) => {
+      MP.config[key] = val;
+      NET.send({ t: 'config', config: MP.config });
+    },
+  },
   warpRace(pos) {
     initGame();
     G.gridPos = pos || 4; G.qualBonus = 1000; G.qualTime = 63.2;

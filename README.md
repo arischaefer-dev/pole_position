@@ -33,6 +33,7 @@ the classic arcade HUD as a 2D overlay.
 | ↓ or Space | brake |
 | Z or Shift | shift gear (LO/HI) |
 | Enter | start / quick restart |
+| 2 | two-player mode (host an online race) |
 | P or Esc | pause |
 | R | watch a replay of your last run |
 | O | options (track, laps, game time, extended time — the arcade dip switches) |
@@ -77,6 +78,23 @@ and local sponsor boards:
 
 Plus a live minimap during play and a TV-style race replay (press R after
 a run) filmed from trackside cameras.
+
+## Two player (online)
+
+Press **2** on the title screen (or tap the 2 PLAYER line on a phone) to
+host a race: pick the track, the number of CPU racers (0–7), and the lap
+count, then share the join link — on a phone the share sheet opens so you
+can text it straight to a friend. They tap the link, join automatically,
+and when you hit START both screens run a synchronized countdown into a
+real-time head-to-head race with the CPU field around you. No qualifying
+and no clock: first to finish the laps wins, and trading paint uses the
+same bump physics as the CPU cars. If someone drops mid-race the survivor
+wins by forfeit; afterwards the host can call a rematch.
+
+Under the hood it's a small WebSocket relay on the same server — rooms are
+in-memory five-letter codes, each browser simulates its own car, the
+opponent is interpolated from a 20 Hz state stream, and the host's
+simulation is authoritative for the CPU cars.
 
 ## Running
 
