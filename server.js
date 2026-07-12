@@ -1,17 +1,148 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);   // Railway's edge: req.ip = the real client
 app.use(express.static(path.join(__dirname, 'public')));
 
 // the 2D version was retired; keep old links working
 app.get(['/classic', '/classic/*splat'], (req, res) => res.redirect(301, '/'));
 
+// ---------------------------------------------------------------------------
+// Global leaderboard: one shared high-score table and one best-lap record
+// per track, persisted to a JSON file. Point DATA_DIR at a mounted volume
+// (Railway: attach a volume at /data and set DATA_DIR=/data) so the records
+// survive redeployments; without it they last until the next deploy.
+// ---------------------------------------------------------------------------
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'scores.json');
+const SEED_SCORES = [
+  { initials: 'NAM', score: 12000 }, { initials: 'ATA', score: 10000 },
+  { initials: 'FUJ', score: 8000 }, { initials: 'GPX', score: 6000 },
+  { initials: 'POL', score: 4000 }
+];
+const INI_RE = /^[A-Z0-9]{3}$/;
+const LAP_TRACKS = ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle', 'peg'];
+
+let board = { v: 1, scores: SEED_SCORES.slice(), laps: {} };
+
+function validEntry(e) {
+  return e && typeof e === 'object' && INI_RE.test(e.initials) &&
+    Number.isInteger(e.score) && e.score > 0 && e.score <= 1_000_000;
+}
+function loadBoard() {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); }
+  catch (e) { console.error('leaderboard: cannot create DATA_DIR, running in-memory:', e.message); return; }
+  let raw;
+  try { raw = fs.readFileSync(DATA_FILE, 'utf8'); }
+  catch { return; }   // first boot: no file yet, keep seeds
+  try {
+    const d = JSON.parse(raw);
+    if (d.v !== 1 || !Array.isArray(d.scores) || !d.scores.every(validEntry) ||
+        typeof d.laps !== 'object' || !d.laps) throw new Error('bad shape');
+    board.scores = d.scores.slice(0, 5);
+    board.laps = {};
+    for (const [t, r] of Object.entries(d.laps)) {
+      if (LAP_TRACKS.includes(t) && r && INI_RE.test(r.initials) &&
+          Number.isFinite(r.time) && r.time >= 20 && r.time <= 600) {
+        board.laps[t] = { initials: r.initials, time: r.time };
+      }
+    }
+  } catch (e) {
+    // keep the corpse for post-mortem, then start over from the seeds
+    console.error('leaderboard: corrupt data file, reseeding:', e.message);
+    try { fs.renameSync(DATA_FILE, DATA_FILE + '.bad-' + Date.now()); } catch {}
+  }
+}
+loadBoard();
+
+let saveTimer = null;
+function saveNow() {
+  saveTimer = null;
+  try {
+    // tmp lives in DATA_DIR: rename is only atomic within one filesystem
+    const tmp = DATA_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(board));
+    fs.renameSync(tmp, DATA_FILE);
+  } catch (e) { console.error('leaderboard: save failed:', e.message); }
+}
+function saveSoon() {
+  if (!saveTimer) {
+    saveTimer = setTimeout(saveNow, 500);
+    saveTimer.unref();
+  }
+}
+
+// light per-IP write throttle: this is an arcade toy, not a bank
+const writeLog = new Map(); // ip -> {n, t0}
+function rateLimited(req) {
+  const now = Date.now();
+  const rec = writeLog.get(req.ip);
+  if (!rec || now - rec.t0 > 60e3) {
+    writeLog.set(req.ip, { n: 1, t0: now });
+    if (writeLog.size > 5000) writeLog.clear();   // crude memory cap
+    return false;
+  }
+  return ++rec.n > 10;
+}
+
+app.use('/api', express.json({ limit: '1kb' }));
+
+app.get('/api/scores', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(board);
+});
+
+app.post('/api/scores', (req, res) => {
+  const { initials, score } = req.body || {};
+  if (!INI_RE.test(String(initials)) || !Number.isInteger(score) ||
+      score <= 0 || score > 1_000_000 || score % 10 !== 0) {
+    return res.status(400).json({ error: 'bad_request' });
+  }
+  if (rateLimited(req)) return res.status(429).json({ error: 'rate_limited' });
+  board.scores.push({ initials, score });
+  board.scores.sort((a, b) => b.score - a.score);
+  board.scores = board.scores.slice(0, 5);
+  saveSoon();
+  res.json({ scores: board.scores });
+});
+
+app.post('/api/laps', (req, res) => {
+  const { initials, track, time } = req.body || {};
+  if (!INI_RE.test(String(initials)) || !LAP_TRACKS.includes(track) ||
+      !Number.isFinite(time) || time < 20 || time > 600) {
+    return res.status(400).json({ error: 'bad_request' });
+  }
+  if (rateLimited(req)) return res.status(429).json({ error: 'rate_limited' });
+  const t = Math.round(time * 100) / 100;
+  const cur = board.laps[track];
+  const accepted = !cur || t < cur.time;
+  if (accepted) {
+    board.laps[track] = { initials, time: t };
+    saveSoon();
+  }
+  res.json({ accepted, laps: board.laps });
+});
+
+// body-parser failures (bad JSON, oversize) -> clean API errors
+app.use('/api', (err, req, res, next) => {
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'too_large' });
+  res.status(400).json({ error: 'bad_request' });
+});
+
 const server = app.listen(PORT, () => {
   console.log(`Pole Position running on port ${PORT}`);
+});
+
+// Railway sends SIGTERM on redeploy: flush any pending leaderboard write
+process.on('SIGTERM', () => {
+  if (saveTimer) { clearTimeout(saveTimer); saveNow(); }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
 });
 
 // ---------------------------------------------------------------------------

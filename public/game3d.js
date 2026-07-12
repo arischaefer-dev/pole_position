@@ -2361,11 +2361,69 @@ try {
   }
   bestEver = parseFloat(localStorage.getItem('pp_bestlap') || '0') || 0;
 } catch (e) {}
+/* ---- global leaderboard (served by the game server, JSON on disk) ----
+   localStorage stays as the offline fallback: if /api is unreachable the
+   game behaves exactly as it did when scores were per-browser. */
+let trackRecs = {};        // trackId -> {initials, time} global lap records
+let netScores = false;     // true once the server table has been adopted
+
+function sanitizeScores(list) {
+  if (!Array.isArray(list) || !list.length || list.length > 5) return null;
+  const ok = list.every(e => e && /^[A-Z0-9]{3}$/.test(e.initials) &&
+    Number.isFinite(e.score) && e.score > 0);
+  return ok ? list.map(e => ({ initials: e.initials, score: Math.floor(e.score) })) : null;
+}
+function adoptScores(list) {
+  const clean = sanitizeScores(list);
+  if (!clean) return;
+  hiScores = clean;
+  if (hiScores[0].score > topScore) topScore = hiScores[0].score;
+  try { localStorage.setItem('pp_scores', JSON.stringify(hiScores)); } catch (e) {}
+}
+function adoptLaps(laps) {
+  if (!laps || typeof laps !== 'object') return;
+  trackRecs = {};
+  for (const [t, r] of Object.entries(laps)) {
+    if (TRACKS[t] && r && /^[A-Z0-9]{3}$/.test(r.initials) &&
+        Number.isFinite(r.time) && r.time > 0) {
+      trackRecs[t] = { initials: r.initials, time: r.time };
+    }
+  }
+}
+function fetchScores() {
+  try {
+    fetch('/api/scores').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      adoptScores(d.scores);
+      adoptLaps(d.laps);
+      netScores = true;
+    }).catch(() => {});
+  } catch (e) {}   // file:// etc: keep localStorage behavior
+}
+fetchScores();
+
 function insertScore(initials, score) {
   hiScores.push({ initials, score });
   hiScores.sort((a, b) => b.score - a.score);
   hiScores = hiScores.slice(0, 5);
   try { localStorage.setItem('pp_scores', JSON.stringify(hiScores)); } catch (e) {}
+  if (netScores) {
+    fetch('/api/scores', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initials, score }),
+    }).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) adoptScores(d.scores); })
+      .catch(() => { netScores = false; });
+  }
+}
+function submitLapRecord(initials, time) {
+  if (!netScores || is2P()) return;
+  fetch('/api/laps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initials, track: TRACK_ID, time: Math.round(time * 100) / 100 }),
+  }).then(r => r.ok ? r.json() : null)
+    .then(d => { if (d) adoptLaps(d.laps); })
+    .catch(() => { netScores = false; });
 }
 function noteLap(t) {
   if (!G.bestLap || t < G.bestLap) G.bestLap = t;
@@ -2669,7 +2727,10 @@ function confirmInitial() {
   AudioFX.beep(880, 0.06, 0.12);
   ini.slot++;
   if (ini.slot >= 3) {
-    insertScore(ini.chars.map(c => CHARSET[c]).join(''), Math.floor(G.score / 10) * 10);
+    const name = ini.chars.map(c => CHARSET[c]).join('');
+    if (ini.forScore !== false)
+      insertScore(name, Math.floor(G.score / 10) * 10);
+    if (ini.forLap) submitLapRecord(name, ini.lap);
     setState('scores');
   }
 }
@@ -2785,8 +2846,13 @@ function startGame() {
   speak('Prepare to qualify');
 }
 function leaveGameOver(quick) {
-  if (Math.floor(G.score / 10) * 10 > hiScores[hiScores.length - 1].score) {
-    G.ini = { chars: [0, 0, 0], slot: 0 };
+  const scoreQ = Math.floor(G.score / 10) * 10 > hiScores[hiScores.length - 1].score;
+  const rec = trackRecs[TRACK_ID];
+  // beating the global track record also earns an initials entry
+  const lapQ = netScores && !is2P() && G.bestLap > 0 &&
+    (!rec || G.bestLap < rec.time);
+  if (scoreQ || lapQ) {
+    G.ini = { chars: [0, 0, 0], slot: 0, forScore: scoreQ, forLap: lapQ, lap: G.bestLap };
     setState('initials');
   } else if (quick) startGame();
   else setState('scores');
@@ -3492,7 +3558,9 @@ function renderStateOverlays() {
       drawTextC(TRACKS[TRACK_ID].name, 92, C.hudWhite);
       shade(106, 80);
       drawTextC('TOP SCORE ' + topScore, 108, C.hudYel);
-      if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
+      const rec = trackRecs[TRACK_ID];
+      if (rec) drawTextC('TRACK RECORD ' + fmtLap(rec.time) + ' ' + rec.initials, 120, C.hudYel);
+      else if (bestEver) drawTextC('BEST LAP ' + fmtLap(bestEver), 120, C.hudYel);
       if (frame % 40 < 26) drawTextC('PRESS ENTER TO RACE', 136, C.hudWhite);
       drawTextC(COARSE ? '2 PLAYER - TAP HERE' : '2 PLAYER - PRESS 2', 148, C.hudYel);
       drawTextC('QUALIFY IN UNDER 73"00', 160, C.hudCyan);
@@ -3561,6 +3629,7 @@ function renderStateOverlays() {
     case 'scores': {
       shade(52, 122);
       drawTextC('HIGH SCORES', 58, C.hudRed, 2);
+      if (netScores) drawTextC('GLOBAL - ALL PLAYERS', 74, C.hudCyan);
       hiScores.forEach((s, i) => {
         const y = 84 + i * 14;
         drawText(String(i + 1), 62, y, C.hudYel);
@@ -3586,8 +3655,10 @@ function renderStateOverlays() {
     }
     case 'initials': {
       shade(60, 110);
-      drawTextC('GREAT SCORE!', 66, C.hudYel, 2);
-      drawTextC(String(Math.floor(G.score / 10) * 10), 88, C.hudWhite);
+      const lapOnly = G.ini.forLap && !G.ini.forScore;
+      drawTextC(lapOnly ? 'TRACK RECORD!' : 'GREAT SCORE!', 66, C.hudYel, 2);
+      drawTextC(lapOnly ? fmtLap(G.ini.lap)
+        : String(Math.floor(G.score / 10) * 10), 88, C.hudWhite);
       drawTextC('ENTER YOUR INITIALS', 104, C.hudCyan);
       const x0 = HW / 2 - 27;
       for (let i = 0; i < 3; i++) {
@@ -3906,6 +3977,10 @@ window.__pp = {
   get frame() { return frame; },
   get acc() { return acc; },
   get lastT() { return last; },
+  get hiScores() { return hiScores; },
+  get trackRecs() { return trackRecs; },
+  get netScores() { return netScores; },
+  leaveGameOver,
   keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED, scene, camera, renderer,
   setState, setupRaceGrid, flash, REC,
   mp: {

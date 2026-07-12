@@ -96,6 +96,25 @@ in-memory five-letter codes, each browser simulates its own car, the
 opponent is interpolated from a 20 Hz state stream, and the host's
 simulation is authoritative for the CPU cars.
 
+## Global high scores
+
+The high-score table and a best-lap record per circuit are shared by every
+player: the game server keeps them (`/api/scores`) and persists them to
+`DATA_DIR/scores.json`. Beat the table — or the track record — and you'll
+be asked for your initials; the title screen shows the current track's
+record with its holder. If the server can't be reached (offline, static
+hosting), scores quietly fall back to per-browser localStorage.
+
+To make the records survive Railway redeployments (one-time setup):
+
+1. Railway dashboard → your service → **Attach Volume**, mount path `/data`.
+2. Add the service variable `DATA_DIR=/data`.
+3. Redeploy. Verify by hitting `https://<your-app>/api/scores`, deploying
+   again, and checking the table is unchanged.
+
+Without the volume everything still works — the leaderboard just resets on
+each deploy. Local dev writes `./data/scores.json` automatically.
+
 ## Running
 
 ```
