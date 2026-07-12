@@ -257,6 +257,104 @@ const AudioFX = {
   fail()   { this.jingle([392, 330, 262, 196], 160, 0.2); }
 };
 
+/* ---------------- background music: an 8-bit chiptune sequencer -------
+   Generated like everything else - no audio files. A lookahead scheduler
+   plays a 16-bar A-minor loop (square lead, triangle bass, noise hats)
+   while driving; the final lap transposes up and speeds up. Toggled by
+   the MUSIC row in options (DIP.music). */
+const MUSIC = (() => {
+  // MIDI notes, 8th-note grid, one array entry per bar; 0 = rest.
+  // Two 8-bar phrases: a driving riff (Am Am F G / Am Am Dm E) and a
+  // higher answer (Am C F G / Am C Dm E).
+  const LEAD_BARS = [
+    [69, 0, 76, 0, 69, 0, 67, 69], [72, 0, 71, 69, 71, 0, 64, 0],
+    [77, 0, 72, 0, 69, 0, 72, 74], [76, 74, 71, 67, 71, 74, 76, 0],
+    [69, 0, 76, 0, 69, 0, 67, 69], [72, 0, 71, 69, 71, 0, 64, 0],
+    [74, 0, 69, 0, 77, 76, 74, 72], [71, 0, 76, 0, 71, 68, 71, 0],
+    [76, 0, 81, 0, 76, 0, 72, 76], [79, 0, 76, 72, 76, 0, 67, 0],
+    [81, 79, 77, 0, 72, 0, 77, 79], [81, 0, 79, 77, 76, 74, 71, 0],
+    [76, 0, 81, 0, 76, 0, 72, 76], [79, 0, 76, 72, 76, 0, 67, 0],
+    [77, 76, 74, 76, 77, 0, 69, 72], [71, 72, 71, 69, 68, 0, 64, 0],
+  ];
+  const ROOTS = [45, 45, 41, 43, 45, 45, 38, 40,
+                 45, 36, 41, 43, 45, 36, 38, 40];
+  const lead = LEAD_BARS.flat();
+  // pumping octave bass with a fifth pickup into each bar's last beat
+  const bass = ROOTS.flatMap(r => [r, r + 12, r, r + 12, r, r + 12, r + 7, r + 12]);
+  const N = lead.length;
+  const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const BPM = 132;
+
+  return {
+    playing: false,
+    _timer: null, _step: 0, _nextT: 0, _gain: null,
+    _ensure() {
+      if (this._gain || !AudioFX.ctx) return;
+      this._gain = AudioFX.ctx.createGain();
+      this._gain.gain.value = 0.5;                 // well under the engine
+      this._gain.connect(AudioFX.master);
+    },
+    _note(type, midi, t, dur, vol) {
+      const ctx = AudioFX.ctx;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = hz(midi);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g); g.connect(this._gain);
+      o.start(t); o.stop(t + dur + 0.02);
+    },
+    _hat(t, vol) {
+      const ctx = AudioFX.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = AudioFX.noiseBuf;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 6500;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+      src.connect(hp); hp.connect(g); g.connect(this._gain);
+      src.start(t); src.stop(t + 0.05);
+    },
+    _tick() {
+      const ctx = AudioFX.ctx;
+      // final lap: up a whole tone and ~8% faster, per-step so no restart
+      const lift = G.state === 'race' && G.lap >= RACE_LAPS;
+      const stepDur = 30 / (BPM * (lift ? 1.08 : 1));   // one 8th note
+      const tr = lift ? 2 : 0;
+      while (this._nextT < ctx.currentTime + 0.12) {
+        const i = this._step % N;
+        const t = Math.max(this._nextT, ctx.currentTime);
+        if (lead[i]) this._note('square', lead[i] + tr, t, stepDur * 0.85, 0.05);
+        if (bass[i]) this._note('triangle', bass[i] + tr, t, stepDur * 0.9, 0.09);
+        this._hat(t, i % 2 ? 0.018 : 0.008);            // offbeat accents
+        this._step++;
+        this._nextT += stepDur;
+      }
+    },
+    start() {
+      this._ensure();
+      if (!this._gain) return;
+      this.playing = true;
+      this._nextT = AudioFX.ctx.currentTime + 0.06;     // groove position persists
+      this._timer = setInterval(() => this._tick(), 25);
+      this._tick();
+    },
+    stop() {
+      this.playing = false;
+      clearInterval(this._timer);
+      this._timer = null;
+    },
+    // called every rendered frame: reconciles play state with the game
+    update() {
+      const want = DIP.music && !AudioFX.muted && !G.paused && AudioFX.ctx &&
+        (G.state === 'qualify' || G.state === 'race');
+      if (want && !this.playing) this.start();
+      else if (!want && this.playing) this.stop();
+    },
+  };
+})();
+
 /* announcer voice, approximating the arcade's digitized speech */
 function speak(txt) {
   try {
@@ -2323,8 +2421,9 @@ const GAME_TIME_RATE = 2;
 const QUAL_TIME = 90;
 /* operator "dip switch" settings, same ranges as the arcade cabinet */
 const DIP_CHOICES = { laps: [3, 4, 5, 6], time: [90, 120], ext: [45, 55, 60],
-  track: ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle', 'peg'] };
-const DIP = { laps: 3, time: 90, ext: 60, track: 'fuji' };
+  track: ['fuji', 'seaside', 'canyon', 'neon', 'alpine', 'jungle', 'peg'],
+  music: [true, false] };
+const DIP = { laps: 3, time: 90, ext: 60, track: 'fuji', music: true };
 try {
   const d = JSON.parse(localStorage.getItem('pp_dip') || '{}');
   for (const k of Object.keys(DIP))
@@ -2742,11 +2841,13 @@ function toggleGear() {
   }
 }
 const DIP_ROWS = [
-  ['TRACK', 'track'], ['LAPS', 'laps'], ['GAME TIME', 'time'], ['EXTENDED TIME', 'ext']
+  ['TRACK', 'track'], ['LAPS', 'laps'], ['GAME TIME', 'time'],
+  ['EXTENDED TIME', 'ext'], ['MUSIC', 'music']
 ];
 function optionsInput(k) {
-  if (k === 'arrowup') G.optSel = (G.optSel + 3) % 4;
-  else if (k === 'arrowdown') G.optSel = (G.optSel + 1) % 4;
+  const n = DIP_ROWS.length;
+  if (k === 'arrowup') G.optSel = (G.optSel + n - 1) % n;
+  else if (k === 'arrowdown') G.optSel = (G.optSel + 1) % n;
   else if (k === 'arrowleft' || k === 'arrowright') {
     const key = DIP_ROWS[G.optSel][1];
     const list = DIP_CHOICES[key];
@@ -3646,11 +3747,12 @@ function renderStateOverlays() {
         const y = 82 + i * 15;
         const sel = i === G.optSel;
         drawText((sel ? '>' : ' ') + label, 40, y, sel ? C.hudYel : C.hudWhite);
-        const val = key === 'track' ? TRACKS[DIP[key]].name : String(DIP[key]);
+        const val = key === 'track' ? TRACKS[DIP[key]].name
+          : key === 'music' ? (DIP.music ? 'ON' : 'OFF') : String(DIP[key]);
         drawText(val, 214 - textW(val), y, sel ? C.hudYel : C.hudCyan);
       });
       drawTextC(COARSE ? 'TAP ROW TO CHANGE - OPT OK'
-        : 'ARROWS CHANGE - ENTER OK', 152, C.hudWhite);
+        : 'ARROWS CHANGE - ENTER OK', 164, C.hudWhite);
       break;
     }
     case 'initials': {
@@ -3791,6 +3893,7 @@ function loop(now) {
   if (dt < 0) dt = 0;   // first RAF timestamp can lag the module-eval clock
   acc += dt;
   while (acc >= STEP) { if (!G.paused) update(STEP); acc -= STEP; }
+  MUSIC.update();
   updateView();
   renderHud2D();
   requestAnimationFrame(loop);
@@ -3826,11 +3929,11 @@ window.__ppInput = (k, down, pt) => {
   if (k === 'tap') {                     // screen tap, pt in 256x224 HUD coords
     if (down) {
       if (G.state === 'options' && pt) {
-        if (pt.y >= 75 && pt.y < 142) {  // menu rows at y = 82 + i*15
+        if (pt.y >= 75 && pt.y < 157) {  // menu rows at y = 82 + i*15
           G.optSel = Math.max(0, Math.min(DIP_ROWS.length - 1,
             Math.round((pt.y - 82) / 15)));
           optionsInput(pt.x < HW / 2 ? 'arrowleft' : 'arrowright');
-        } else if (pt.y >= 142) { applyDip(); setState('title'); }
+        } else if (pt.y >= 157) { applyDip(); setState('title'); }
       } else if (G.state === 'lobby' && pt) {
         if (pt.y >= 75 && pt.y < 155) {  // same row geometry as options
           MP.lobbySel = Math.max(0, Math.min(MP_ROWS.length - 1,
@@ -3981,6 +4084,8 @@ window.__pp = {
   get trackRecs() { return trackRecs; },
   get netScores() { return netScores; },
   leaveGameOver,
+  music: MUSIC,
+  DIP,
   keys, kappaAt, posAt, TRACK_LEN, MAX_SPEED, scene, camera, renderer,
   setState, setupRaceGrid, flash, REC,
   mp: {

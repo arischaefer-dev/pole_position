@@ -36,7 +36,7 @@ the classic arcade HUD as a 2D overlay.
 | 2 | two-player mode (host an online race) |
 | P or Esc | pause |
 | R | watch a replay of your last run |
-| O | options (track, laps, game time, extended time — the arcade dip switches) |
+| O | options (track, laps, game time, extended time, music — the arcade dip switches) |
 | M | mute |
 
 On phones and tablets, on-screen touch controls appear automatically:
@@ -50,7 +50,9 @@ Portrait and landscape both work.
 
 Attract mode with a self-driving demo, high-score table with initials entry,
 best-lap tracking, voice announcements, checkered flags on the final lap,
-and an options menu mirroring the original operator dip-switch ranges.
+an 8-bit chiptune that plays while you drive (it shifts up a gear on the
+final lap; switch it off from the MUSIC row in options), and an options
+menu mirroring the original operator dip-switch ranges.
 Progress persists in `localStorage`.
 
 Six circuits, selectable from the options menu, each with its own scenery
