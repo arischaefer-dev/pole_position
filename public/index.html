@@ -1,18 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Pole Position</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; }
-    #canvas { border: 2px solid #444; display: block; }
-    #ui { color: #fff; text-align: center; margin-top: 8px; font-size: 13px; letter-spacing: 1px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Pole Position 3D</title>
+<meta name="description" content="Browser remake of the 1982 Namco/Atari arcade racer Pole Position — qualify in under 73 seconds, then race the Grand Prix in true 3D.">
+<meta property="og:title" content="Pole Position 3D">
+<meta property="og:description" content="Qualify in under 73 seconds, then race the Grand Prix. A faithful browser remake of the 1982 arcade classic.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23fff'/%3E%3Cpath fill='%23000' d='M0 0h4v4H0zM8 0h4v4H8zM4 4h4v4H4zM12 4h4v4h-4zM0 8h4v4H0zM8 8h4v4H8zM4 12h4v4H4zM12 12h4v4h-4z'/%3E%3C/svg%3E">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #101010; color: #ccc;
+    font-family: monospace;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  #wrap {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px;
+  }
+  /* touch devices: no keyboard help, game anchored below the START bar
+     so the lower half of the screen is clean thumb space */
+  @media (pointer: coarse) {
+    #help { display: none; }
+    #wrap {
+      justify-content: flex-start;
+      padding-top: calc(54px + env(safe-area-inset-top));
+      box-sizing: border-box;
+    }
+  }
+  @media (pointer: coarse) and (orientation: landscape) {
+    #wrap { justify-content: center; padding-top: 0; }
+  }
+  #stack { position: relative; }
+  #stack canvas { display: block; }
+  #hud {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #gl {
+    background: #000;
+    /* touch-action does NOT inherit from body: without this, real iOS
+       Safari runs canvas taps through double-tap-zoom disambiguation,
+       delaying single taps and swallowing rapid ones (menu row taps) */
+    touch-action: none;
+  }
+  #hud {
+    position: absolute; inset: 0;
+    pointer-events: none;
+  }
+  #help {
+    font-size: 12px; color: #888; text-align: center;
+    line-height: 1.5;
+  }
+  #help b { color: #ddd; }
+  #help a { color: #6bf; }
+</style>
 </head>
 <body>
-  <canvas id="canvas" width="640" height="480"></canvas>
-  <div id="ui">ARROW KEYS / WASD &nbsp;|&nbsp; SPACE = BRAKE</div>
-  <script src="game.js"></script>
+<div id="wrap">
+  <div id="stack">
+    <canvas id="gl" width="512" height="448"></canvas>
+    <canvas id="hud" width="256" height="224"></canvas>
+  </div>
+  <div id="help">
+    <b>&larr;/&rarr;</b> steer &nbsp; <b>&uarr;</b> accelerate &nbsp; <b>&darr;</b>/<b>Space</b> brake &nbsp;
+    <b>Z</b>/<b>Shift</b> shift gear (LO/HI) &nbsp; <b>Enter</b> start &nbsp; <b>2</b> two player &nbsp; <b>P</b> pause &nbsp; <b>R</b> replay &nbsp; <b>M</b> mute
+  </div>
+</div>
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+<script type="module" src="game3d.js?v=5"></script>
+<script src="/touch.js?v=2"></script>
 </body>
 </html>
